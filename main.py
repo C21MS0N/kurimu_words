@@ -231,6 +231,9 @@ class GameState:
         self.chat_id = chat_id
         self.application = application
         self.current_turn_user_id: Optional[int] = None
+        
+        self.rebound_target_letter: Optional[str] = None
+        self.rebound_target_length: Optional[int] = None
 
         self.load_dictionary()
 
@@ -401,13 +404,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/difficulty [easy/medium/hard] - Set difficulty\n"
         "/forfeit - Give up your turn (-10 pts, points before forfeit count)\n"
         "/stop - Stop the current game\n\n"
+        "💰 <b>Shop & Boosts:</b>\n"
+        "/shop - View available boosts\n"
+        "/buy_hint /buy_skip /buy_rebound - Purchase boosts\n"
+        "/hint - Get word suggestions\n"
+        "/skip_boost - Skip without penalty\n"
+        "/rebound - Skip & pass question to next player\n\n"
         "📊 <b>Stats & Leaderboard:</b>\n"
         "/mystats - View your personal stats\n"
         "/leaderboard [score/words/streak/longest] - Top players\n\n"
         "💡 <b>Features:</b>\n"
         "• Streak tracking & combo bonuses\n"
         "• Three difficulty modes\n"
-        "• Comprehensive player statistics\n",
+        "• Comprehensive player statistics\n"
+        "• Shop system with purchasable boosts\n",
         parse_mode='HTML'
     )
 
@@ -613,6 +623,36 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
+async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    balance = db.get_balance(user.id)
+    inventory = db.get_inventory(user.id)
+    
+    text = f"🛍️ *SHOP* 💰 Balance: *{balance} pts*\n\n"
+    for boost_type, details in SHOP_BOOSTS.items():
+        owned = inventory[boost_type]
+        text += f"{details['description']}\n💵 Price: *{details['price']} pts* | Owned: *{owned}*\n/buy_{boost_type}\n\n"
+    text += "Example: /buy_hint to purchase hint boost"
+    await update.message.reply_text(text, parse_mode='MarkdownV2')
+
+async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /buy_hint, /buy_skip, or /buy_rebound")
+        return
+    
+    boost_type = context.args[0].lower()
+    if boost_type not in SHOP_BOOSTS:
+        await update.message.reply_text("❌ Invalid boost! Use: hint, skip, or rebound")
+        return
+    
+    price = SHOP_BOOSTS[boost_type]['price']
+    if db.buy_boost(user.id, boost_type, price):
+        await update.message.reply_text(f"✅ Purchased {boost_type}! (-{price} pts)")
+    else:
+        balance = db.get_balance(user.id)
+        await update.message.reply_text(f"❌ Insufficient balance! Need {price} pts, have {balance} pts")
+
 async def mystats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     stats = db.get_player_stats(user.id)
@@ -640,6 +680,90 @@ async def mystats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error fetching profile photo: {str(e)}")
         await update.message.reply_text(stats_text, parse_mode='HTML')
+
+async def hint_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    if chat_id not in games or not games[chat_id].is_running:
+        await update.message.reply_text("❌ No active game!")
+        return
+    
+    game = games[chat_id]
+    if user.id != game.players[game.current_player_index]['id']:
+        await update.message.reply_text("❌ It's not your turn!")
+        return
+    
+    inventory = db.get_inventory(user.id)
+    if inventory['hint'] <= 0:
+        await update.message.reply_text(f"❌ No hint boosts! Buy one for {SHOP_BOOSTS['hint']['price']} pts")
+        return
+    
+    words = [w for w in game.dictionary if len(w) == game.current_word_length and w.startswith(game.current_start_letter)][:3]
+    if words:
+        db.use_boost(user.id, 'hint')
+        text = f"📖 *Hint\\!* Possible words: {', '.join(words)}"
+        await update.message.reply_text(text, parse_mode='MarkdownV2')
+    else:
+        await update.message.reply_text("❌ No valid words found!")
+
+async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    if chat_id not in games or not games[chat_id].is_running:
+        await update.message.reply_text("❌ No active game!")
+        return
+    
+    game = games[chat_id]
+    if user.id != game.players[game.current_player_index]['id']:
+        await update.message.reply_text("❌ It's not your turn!")
+        return
+    
+    inventory = db.get_inventory(user.id)
+    if inventory['skip'] <= 0:
+        await update.message.reply_text(f"❌ No skip boosts! Buy one for {SHOP_BOOSTS['skip']['price']} pts")
+        return
+    
+    db.use_boost(user.id, 'skip')
+    game.cancel_timeout()
+    game.next_turn()
+    next_player = game.players[game.current_player_index]
+    turn_time = game.get_turn_time()
+    game.current_turn_user_id = next_player['id']
+    
+    await update.message.reply_text(f"⏭️ @{user.username} used skip boost\\!\n\n👉 @{next_player['username']}'s Turn\nTarget: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
+    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
+
+async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    if chat_id not in games or not games[chat_id].is_running:
+        await update.message.reply_text("❌ No active game!")
+        return
+    
+    game = games[chat_id]
+    if user.id != game.players[game.current_player_index]['id']:
+        await update.message.reply_text("❌ It's not your turn!")
+        return
+    
+    inventory = db.get_inventory(user.id)
+    if inventory['rebound'] <= 0:
+        await update.message.reply_text(f"❌ No rebound boosts! Buy one for {SHOP_BOOSTS['rebound']['price']} pts")
+        return
+    
+    db.use_boost(user.id, 'rebound')
+    game.cancel_timeout()
+    game.rebound_target_letter = game.current_start_letter
+    game.rebound_target_length = game.current_word_length
+    game.next_turn()
+    next_player = game.players[game.current_player_index]
+    turn_time = game.get_turn_time()
+    game.current_turn_user_id = next_player['id']
+    
+    await update.message.reply_text(f"🔄 @{user.username} rebounded\\!\n\n👉 @{next_player['username']}'s Turn \\(SAME QUESTION\\)\nTarget: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
+    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -723,6 +847,13 @@ if __name__ == '__main__':
         application.add_handler(CommandHandler("forfeit", forfeit_command))
         application.add_handler(CommandHandler("mystats", mystats_command))
         application.add_handler(CommandHandler("leaderboard", leaderboard))
+        application.add_handler(CommandHandler("shop", shop_command))
+        application.add_handler(CommandHandler("buy_hint", buy_boost_command))
+        application.add_handler(CommandHandler("buy_skip", buy_boost_command))
+        application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
+        application.add_handler(CommandHandler("hint", hint_boost_command))
+        application.add_handler(CommandHandler("skip_boost", skip_boost_command))
+        application.add_handler(CommandHandler("rebound", rebound_boost_command))
         application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
         logger.info(f"Loaded dictionary words")
