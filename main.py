@@ -295,7 +295,7 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
     
     await application.bot.send_message(
         chat_id=chat_id,
-        text=f"⏰ <b>Time's Up!</b> [user](tg://user?id={current_player['id']}) is eliminated! (-10 pts)\n\nPoints before elimination count.",
+        text=f"⏰ *Time's Up\\!* @{current_player['username']} is eliminated\\! \\(-10 pts\\)\n\nPoints before elimination count\\.",
         parse_mode='MarkdownV2'
     )
     
@@ -306,7 +306,7 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
         if winner:
             await application.bot.send_message(
                 chat_id=chat_id,
-                text=f"🏆 <b>GAME OVER!</b>\n\n👑 <b>Winner:</b> [user](tg://user?id={winner['id']})",
+                text=f"🏆 *GAME OVER\\!*\n\n👑 *Winner:* @{winner['username']}",
                 parse_mode='MarkdownV2'
             )
         game.reset()
@@ -322,7 +322,7 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
     
     await application.bot.send_message(
         chat_id=chat_id,
-        text=f"👉 [user](tg://user?id={next_player['id']})'s Turn\n"
+        text=f"👉 @{next_player['username']}'s Turn\n"
              f"Target: *{game.current_word_length} letters* starting with *{game.current_start_letter.upper()}*\n"
              f"⏱️ *Time: {turn_time}s*",
         parse_mode='MarkdownV2'
@@ -372,11 +372,12 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.is_lobby_open = True
 
     user = update.effective_user
-    game.players.append({'id': user.id, 'name': user.first_name})
+    username = user.username if user.username else user.first_name
+    game.players.append({'id': user.id, 'name': user.first_name, 'username': username})
 
     await update.message.reply_text(
         f"📢 <b>Lobby Opened!</b>\n\n"
-        f"{user.first_name} has joined.\n"
+        f"@{username} has joined.\n"
         f"Waiting for others... Type /join to play!",
         parse_mode='HTML'
     )
@@ -392,12 +393,13 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = games[chat_id]
 
     if any(p['id'] == user.id for p in game.players):
-        await update.message.reply_text(f"👤 {user.first_name}, you are already in.")
+        await update.message.reply_text(f"👤 You are already in.")
         return
 
-    game.players.append({'id': user.id, 'name': user.first_name})
+    username = user.username if user.username else user.first_name
+    game.players.append({'id': user.id, 'name': user.first_name, 'username': username})
     game.initialize_player_stats(user.id)
-    await update.message.reply_text(f"✅ <b>{user.first_name}</b> joined! (Total: {len(game.players)})", parse_mode='HTML')
+    await update.message.reply_text(f"✅ @{username} joined! (Total: {len(game.players)})", parse_mode='HTML')
 
 async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -430,8 +432,8 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🎮 *Game Started\\!*\n"
         f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} *{game.difficulty.upper()}*\n"
-        f"Players: {', '.join([p['name'] for p in game.players])}\n\n"
-        f"👉 [user](tg://user?id={current_player['id']})'s turn\\!\n"
+        f"Players: {', '.join([p['username'] for p in game.players])}\n\n"
+        f"👉 @{current_player['username']}'s turn\\!\n"
         f"Write a *{game.current_word_length}\\-letter* word starting with *'{game.current_start_letter.upper()}'*\n"
         f"⏱️ *Time: {turn_time}s*",
         parse_mode='MarkdownV2'
@@ -534,7 +536,7 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(game.eliminated_players) >= len(game.players) - 1:
         winner = next((p for p in game.players if p['id'] not in game.eliminated_players), None)
         if winner:
-            await update.message.reply_text(f"🏆 <b>GAME OVER!</b>\n\n👑 <b>Winner:</b> [user](tg://user?id={winner['id']})", parse_mode='MarkdownV2')
+            await update.message.reply_text(f"🏆 *GAME OVER\\!*\n\n👑 *Winner:* @{winner['username']}", parse_mode='MarkdownV2')
         game.reset()
         return
     
@@ -546,7 +548,7 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     turn_time = game.get_turn_time()
     game.current_turn_user_id = next_player['id']
     await update.message.reply_text(
-        f"👉 [user](tg://user?id={next_player['id']})'s Turn\n"
+        f"👉 @{next_player['username']}'s Turn\n"
         f"Target: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
         f"⏱️ *Time: {turn_time}s*",
         parse_mode='MarkdownV2'
@@ -626,7 +628,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         turn_time = game.get_turn_time()
         game.current_turn_user_id = next_player['id']
         
-        msg_text += f"👉 [user](tg://user?id={next_player['id']})'s Turn\n"
+        msg_text += f"👉 @{next_player['username']}'s Turn\n"
         msg_text += f"Target: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
         msg_text += f"⏱️ *Time: {turn_time}s*"
 
