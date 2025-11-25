@@ -74,16 +74,22 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
-    def update_word_stats(self, user_id, username, word, streak=0):
+    def update_word_stats(self, user_id, username, word, streak=0, forfeit=False):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
 
         c.execute("SELECT * FROM leaderboard WHERE user_id=?", (user_id,))
         entry = c.fetchone()
 
-        # Entry structure changed (indices shifted due to removed columns)
-        # 0: id, 1: name, 2: total_words, 3: games, 4: longest_word, 
-        # 5: len, 6: streak, 7: score, 8: avg_len
+        if forfeit:
+            if entry:
+                total_score = max(0, entry[7] - 10)
+                c.execute('''UPDATE leaderboard SET 
+                    total_score = ?
+                    WHERE user_id=?''', (total_score, user_id))
+            conn.commit()
+            conn.close()
+            return
 
         if entry:
             total_words = entry[2] + 1
@@ -91,7 +97,6 @@ class DatabaseManager:
             longest_word_length = max(entry[5], len(word))
             best_streak = max(entry[6], streak)
             total_score = entry[7] + len(word)
-            # entry[8] is now avg_len
             avg_word_length = ((entry[8] * entry[2]) + len(word)) / total_words
 
             c.execute('''UPDATE leaderboard SET 
@@ -160,7 +165,9 @@ class GameState:
 
         self.difficulty = 'medium'
         self.player_streaks: Dict[int, int] = {}
-        # Removed player_hints, player_skips, skips_remaining
+        self.eliminated_players: Set[int] = set()
+        self.last_word_length = 3
+        self.difficulty_level = 0
 
         self.turn_start_time: Optional[float] = None
         self.timeout_task: Optional[asyncio.Task] = None
@@ -200,7 +207,9 @@ class GameState:
         self.used_words = set()
         self.turn_count = 0
         self.player_streaks = {}
-        # Removed reset logic for hints/skips
+        self.eliminated_players = set()
+        self.last_word_length = difficulty_config['start_length']
+        self.difficulty_level = 0
         self.turn_start_time = None
         if self.timeout_task:
             self.timeout_task.cancel()
@@ -222,14 +231,24 @@ class GameState:
         increment_every = difficulty_config['increment_every']
         max_length = difficulty_config['max_length']
 
+        difficulty_increased = False
         if self.turn_count > 0 and self.turn_count % (len(self.players) * increment_every) == 0:
             self.current_word_length += 1
+            self.difficulty_level += 1
+            difficulty_increased = True
             if self.current_word_length > max_length:
                 self.current_word_length = max_length
 
         import string
         self.current_start_letter = random.choice(string.ascii_lowercase)
         self.turn_start_time = time.time()
+        self.last_word_length = self.current_word_length
+        return difficulty_increased
+    
+    def get_turn_time(self) -> int:
+        base_time = 60
+        time_reduction = self.difficulty_level * 5
+        return max(20, base_time - time_reduction)
 
     def get_streak(self, user_id: int) -> int:
         return self.player_streaks.get(user_id, 0)
@@ -262,6 +281,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/join - Join the lobby\n"
         "/begin - Start the game (needs 2+ players)\n"
         "/difficulty [easy/medium/hard] - Set difficulty\n"
+        "/forfeit - Give up your turn (-10 pts, points before forfeit count)\n"
         "/stop - Stop the current game\n\n"
         "📊 <b>Stats & Leaderboard:</b>\n"
         "/mystats - View your personal stats\n"
@@ -342,6 +362,7 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.current_start_letter = random.choice(string.ascii_lowercase)
     game.turn_start_time = time.time()
     current_player = game.players[game.current_player_index]
+    turn_time = game.get_turn_time()
 
     difficulty_emoji = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
     await update.message.reply_text(
@@ -349,7 +370,8 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} <b>{game.difficulty.upper()}</b>\n"
         f"Players: {', '.join([p['name'] for p in game.players])}\n\n"
         f"👉 <b>{current_player['name']}</b>'s turn!\n"
-        f"Write a <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>",
+        f"Write a <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        f"⏱️ <b>Time: {turn_time}s</b>",
         parse_mode='HTML'
     )
 
@@ -422,6 +444,46 @@ async def difficulty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Invalid difficulty! Use: easy, medium, or hard")
 
+async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id not in games or not games[chat_id].is_running:
+        await update.message.reply_text("❌ No active game!")
+        return
+    
+    game = games[chat_id]
+    user = update.effective_user
+    current_player = game.players[game.current_player_index]
+    
+    if user.id != current_player['id']:
+        await update.message.reply_text("❌ It's not your turn!")
+        return
+    
+    game.eliminated_players.add(user.id)
+    game.reset_streak(user.id)
+    db.update_word_stats(user.id, user.first_name, "", 0, forfeit=True)
+    
+    await update.message.reply_text(f"⛔ <b>{user.first_name}</b> forfeited! (-10 pts)\n\nYour accumulated points are valid.", parse_mode='HTML')
+    
+    game.next_turn()
+    
+    if len(game.eliminated_players) >= len(game.players) - 1:
+        await update.message.reply_text("🏁 <b>Game Over!</b> Only one player remains!")
+        game.reset()
+        return
+    
+    next_player = game.players[game.current_player_index]
+    while next_player['id'] in game.eliminated_players:
+        game.next_turn()
+        next_player = game.players[game.current_player_index]
+    
+    turn_time = game.get_turn_time()
+    await update.message.reply_text(
+        f"👉 <b>{next_player['name']}</b>'s Turn\n"
+        f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        f"⏱️ <b>Time: {turn_time}s</b>",
+        parse_mode='HTML'
+    )
+
 async def mystats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     stats = db.get_player_stats(user.id)
@@ -482,15 +544,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current_streak >= 3:
             streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
 
-        game.next_turn()
+        difficulty_increased = game.next_turn()
+        
+        msg_text = f"✅ <b>{user.first_name}</b> - '{word}' (+{len(word)} pts){streak_bonus}\n\n"
+        
+        if difficulty_increased:
+            msg_text += f"📈 <b>DIFFICULTY INCREASED!</b> Now {game.current_word_length} letters!\n\n"
+        
         next_player = game.players[game.current_player_index]
+        turn_time = game.get_turn_time()
+        
+        msg_text += f"👉 <b>{next_player['name']}</b>'s Turn\n"
+        msg_text += f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
 
-        await update.message.reply_text(
-            f"✅ <b>{user.first_name}</b> - '{word}' (+{len(word)} pts){streak_bonus}\n\n"
-            f"👉 <b>{next_player['name']}</b>'s Turn\n"
-            f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(msg_text, parse_mode='HTML')
     except Exception as e:
         logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
         await update.message.reply_text(f"❌ Error processing your word. Try again.")
@@ -511,6 +579,7 @@ if __name__ == '__main__':
         application.add_handler(CommandHandler("begin", begin_game))
         application.add_handler(CommandHandler("difficulty", difficulty))
         application.add_handler(CommandHandler("stop", stop_game))
+        application.add_handler(CommandHandler("forfeit", forfeit_command))
         application.add_handler(CommandHandler("mystats", mystats_command))
         application.add_handler(CommandHandler("leaderboard", leaderboard))
         application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
