@@ -471,25 +471,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Not in my dictionary! Try again.")
         return
 
-    game.used_words.add(word)
-    game.increment_streak(user.id)
-    current_streak = game.get_streak(user.id)
+    try:
+        game.used_words.add(word)
+        game.increment_streak(user.id)
+        current_streak = game.get_streak(user.id)
 
-    db.update_word_stats(user.id, user.first_name, word, current_streak)
+        db.update_word_stats(user.id, user.first_name, word, current_streak)
 
-    streak_bonus = ""
-    if current_streak >= 3:
-        streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
+        streak_bonus = ""
+        if current_streak >= 3:
+            streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
 
-    game.next_turn()
-    next_player = game.players[game.current_player_index]
+        game.next_turn()
+        next_player = game.players[game.current_player_index]
 
-    await update.message.reply_text(
-        f"✅ <b>{user.first_name}</b> - '{word}' (+{len(word)} pts){streak_bonus}\n\n"
-        f"👉 <b>{next_player['name']}</b>'s Turn\n"
-        f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>",
-        parse_mode='HTML'
-    )
+        await update.message.reply_text(
+            f"✅ <b>{user.first_name}</b> - '{word}' (+{len(word)} pts){streak_bonus}\n\n"
+            f"👉 <b>{next_player['name']}</b>'s Turn\n"
+            f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
+        await update.message.reply_text(f"❌ Error processing your word. Try again.")
+        game.used_words.discard(word)
 
 # ==========================================
 # MAIN EXECUTION
