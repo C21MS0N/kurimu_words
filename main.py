@@ -6,6 +6,7 @@ import asyncio
 import time
 from typing import List, Dict, Set, Optional
 from datetime import datetime, timedelta
+from threading import Thread
 
 # Imports from the library
 from telegram import Update
@@ -16,6 +17,9 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
+# Flask for UptimeRobot pings
+from flask import Flask
 
 # ==========================================
 # CONFIGURATION
@@ -848,12 +852,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game.used_words.discard(word)
 
 # ==========================================
+# WEB SERVER FOR UPTIMEBOT PINGS
+# ==========================================
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🎮 Telegram Word Game Bot is online!", 200
+
+def run_web_server():
+    app.run(host='0.0.0.0', port=8080, debug=False)
+
+# ==========================================
 # MAIN EXECUTION
 # ==========================================
 if __name__ == '__main__':
     if BOT_TOKEN == "REPLACE_WITH_TOKEN_IF_NOT_USING_SECRETS":
         print("ERROR: Please set up the BOT_TOKEN in Secrets or paste it in the code.")
     else:
+        # Start web server in background thread for UptimeRobot
+        web_thread = Thread(target=run_web_server, daemon=True)
+        web_thread.start()
+        print("✅ Web server started on port 8080 for UptimeRobot pings")
+        
         while True:
             try:
                 application = ApplicationBuilder().token(BOT_TOKEN).build()

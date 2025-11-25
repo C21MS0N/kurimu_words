@@ -6,4 +6,6 @@ authors = ["Your Name <you@example.com>"]
 requires-python = ">=3.11"
 dependencies = [
     "python-telegram-bot>=21.0",
+    "flask>=2.3.0",
+    "telegram>=0.0.1",
 ]
