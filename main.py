@@ -422,79 +422,6 @@ async def difficulty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Invalid difficulty! Use: easy, medium, or hard")
 
-async def hint_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if chat_id not in games or not games[chat_id].is_running:
-        await update.message.reply_text("❌ No active game!")
-        return
-    
-    game = games[chat_id]
-    user = update.effective_user
-    current_player = game.players[game.current_player_index]
-    
-    if user.id != current_player['id']:
-        await update.message.reply_text("❌ It's not your turn!")
-        return
-    
-    if not game.can_use_hint(user.id):
-        time_left = int(HINT_COOLDOWN - (time.time() - game.player_hints.get(user.id, 0)))
-        await update.message.reply_text(f"⏳ Hint on cooldown! Wait {time_left} seconds.")
-        return
-    
-    hint_words = game.get_hint_words()
-    if not hint_words:
-        await update.message.reply_text("😅 No valid words found! Try a different approach.")
-        return
-    
-    game.use_hint(user.id)
-    db.ensure_player_exists(user.id, user.first_name)
-    db.update_hint_skip(user.id, is_hint=True)
-    
-    await update.message.reply_text(
-        f"💡 <b>Hint</b> - Try one of these:\n"
-        f"{', '.join(hint_words)}",
-        parse_mode='HTML'
-    )
-
-async def skip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if chat_id not in games or not games[chat_id].is_running:
-        await update.message.reply_text("❌ No active game!")
-        return
-    
-    game = games[chat_id]
-    user = update.effective_user
-    current_player = game.players[game.current_player_index]
-    
-    if user.id != current_player['id']:
-        await update.message.reply_text("❌ It's not your turn!")
-        return
-    
-    if not game.can_skip(user.id):
-        skips_left = game.skips_remaining.get(user.id, 0)
-        if skips_left <= 0:
-            await update.message.reply_text("❌ No skips remaining!")
-        else:
-            time_left = int(SKIP_COOLDOWN - (time.time() - game.player_skips.get(user.id, 0)))
-            await update.message.reply_text(f"⏳ Skip on cooldown! Wait {time_left} seconds.")
-        return
-    
-    game.use_skip(user.id)
-    game.reset_streak(user.id)
-    db.ensure_player_exists(user.id, user.first_name)
-    db.update_hint_skip(user.id, is_hint=False)
-    
-    game.next_turn()
-    next_player = game.players[game.current_player_index]
-    skips_left = game.skips_remaining[user.id]
-    
-    await update.message.reply_text(
-        f"⏭️ <b>{user.first_name}</b> skipped! ({skips_left} skips left)\n\n"
-        f"👉 <b>{next_player['name']}</b>'s Turn.\n"
-        f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>",
-        parse_mode='HTML'
-    )
-
 async def mystats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     stats = db.get_player_stats(user.id)
@@ -579,8 +506,6 @@ if __name__ == '__main__':
         application.add_handler(CommandHandler("begin", begin_game))
         application.add_handler(CommandHandler("difficulty", difficulty))
         application.add_handler(CommandHandler("stop", stop_game))
-        application.add_handler(CommandHandler("hint", hint_command))
-        application.add_handler(CommandHandler("skip", skip_command))
         application.add_handler(CommandHandler("mystats", mystats_command))
         application.add_handler(CommandHandler("leaderboard", leaderboard))
         application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
