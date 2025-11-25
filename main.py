@@ -628,12 +628,12 @@ async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance = db.get_balance(user.id)
     inventory = db.get_inventory(user.id)
     
-    text = f"🛍️ *SHOP* 💰 Balance: *{balance} pts*\n\n"
+    text = f"🛍️ <b>SHOP</b> 💰 Balance: <b>{balance} pts</b>\n\n"
     for boost_type, details in SHOP_BOOSTS.items():
         owned = inventory[boost_type]
-        text += f"{details['description']}\n💵 Price: *{details['price']} pts* | Owned: *{owned}*\n/buy_{boost_type}\n\n"
+        text += f"{details['description']}\n💵 Price: <b>{details['price']} pts</b> - Owned: <b>{owned}</b>\n/buy_{boost_type}\n\n"
     text += "Example: /buy_hint to purchase hint boost"
-    await update.message.reply_text(text, parse_mode='MarkdownV2')
+    await update.message.reply_text(text, parse_mode='HTML')
 
 async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
