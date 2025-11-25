@@ -36,6 +36,13 @@ DIFFICULTY_MODES = {
     'hard': {'start_length': 4, 'increment_every': 1, 'max_length': 20}
 }
 
+# Shop Boosts
+SHOP_BOOSTS = {
+    'hint': {'price': 80, 'description': '📖 Get dictionary meaning of a potential correct word'},
+    'skip': {'price': 150, 'description': '⏭️ Skip your turn'},
+    'rebound': {'price': 250, 'description': '🔄 Skip & pass same question to next player'}
+}
+
 # ==========================================
 # LOGGING SETUP
 # ==========================================
@@ -69,6 +76,14 @@ class DatabaseManager:
                 best_streak INTEGER DEFAULT 0,
                 total_score INTEGER DEFAULT 0,
                 average_word_length REAL DEFAULT 0.0
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS inventory (
+                user_id INTEGER PRIMARY KEY,
+                hint_count INTEGER DEFAULT 0,
+                skip_count INTEGER DEFAULT 0,
+                rebound_count INTEGER DEFAULT 0
             )
         ''')
         conn.commit()
@@ -147,6 +162,48 @@ class DatabaseManager:
         data = c.fetchone()
         conn.close()
         return data
+    
+    def get_balance(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT total_score FROM leaderboard WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        return result[0] if result else 0
+    
+    def get_inventory(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        if result: return {'hint': result[1], 'skip': result[2], 'rebound': result[3]}
+        return {'hint': 0, 'skip': 0, 'rebound': 0}
+    
+    def buy_boost(self, user_id, boost_type, price):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        balance = self.get_balance(user_id)
+        if balance < price: return False
+        
+        c.execute("UPDATE leaderboard SET total_score = total_score - ? WHERE user_id=?", (price, user_id))
+        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
+        if not c.fetchone():
+            c.execute("INSERT INTO inventory (user_id) VALUES (?)", (user_id,))
+        
+        col = f"{boost_type}_count"
+        c.execute(f"UPDATE inventory SET {col} = {col} + 1 WHERE user_id=?", (user_id,))
+        conn.commit()
+        conn.close()
+        return True
+    
+    def use_boost(self, user_id, boost_type):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        col = f"{boost_type}_count"
+        c.execute(f"UPDATE inventory SET {col} = {col} - 1 WHERE user_id=?", (user_id,))
+        conn.commit()
+        conn.close()
 
 # ==========================================
 # GAME LOGIC
