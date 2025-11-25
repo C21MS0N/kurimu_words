@@ -295,18 +295,20 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
     
     await application.bot.send_message(
         chat_id=chat_id,
-        text=f"⏰ <b>Time's Up!</b> {current_player['name']} is eliminated! (-10 pts)\n\nPoints before elimination count.",
-        parse_mode='HTML'
+        text=f"⏰ <b>Time's Up!</b> [user](tg://user?id={current_player['id']}) is eliminated! (-10 pts)\n\nPoints before elimination count.",
+        parse_mode='MarkdownV2'
     )
     
     game.next_turn()
     
     if len(game.eliminated_players) >= len(game.players) - 1:
-        await application.bot.send_message(
-            chat_id=chat_id,
-            text="🏁 <b>Game Over!</b> Only one player remains!",
-            parse_mode='HTML'
-        )
+        winner = next((p for p in game.players if p['id'] not in game.eliminated_players), None)
+        if winner:
+            await application.bot.send_message(
+                chat_id=chat_id,
+                text=f"🏆 <b>GAME OVER!</b>\n\n👑 <b>Winner:</b> [user](tg://user?id={winner['id']})",
+                parse_mode='MarkdownV2'
+            )
         game.reset()
         return
     
@@ -320,10 +322,10 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
     
     await application.bot.send_message(
         chat_id=chat_id,
-        text=f"👉 <b>{next_player['name']}</b>'s Turn\n"
-             f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-             f"⏱️ <b>Time: {turn_time}s</b>",
-        parse_mode='HTML'
+        text=f"👉 [user](tg://user?id={next_player['id']})'s Turn\n"
+             f"Target: *{game.current_word_length} letters* starting with *{game.current_start_letter.upper()}*\n"
+             f"⏱️ *Time: {turn_time}s*",
+        parse_mode='MarkdownV2'
     )
     
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], application))
@@ -426,13 +428,13 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     difficulty_emoji = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
     await update.message.reply_text(
-        f"🎮 <b>Game Started!</b>\n"
-        f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} <b>{game.difficulty.upper()}</b>\n"
+        f"🎮 *Game Started\\!*\n"
+        f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} *{game.difficulty.upper()}*\n"
         f"Players: {', '.join([p['name'] for p in game.players])}\n\n"
-        f"👉 <b>{current_player['name']}</b>'s turn!\n"
-        f"Write a <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-        f"⏱️ <b>Time: {turn_time}s</b>",
-        parse_mode='HTML'
+        f"👉 [user](tg://user?id={current_player['id']})'s turn\\!\n"
+        f"Write a *{game.current_word_length}\\-letter* word starting with *'{game.current_start_letter.upper()}'*\n"
+        f"⏱️ *Time: {turn_time}s*",
+        parse_mode='MarkdownV2'
     )
     
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, current_player['id'], context.application))
@@ -525,12 +527,14 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.reset_streak(user.id)
     db.update_word_stats(user.id, user.first_name, "", 0, forfeit=True)
     
-    await update.message.reply_text(f"⛔ <b>{user.first_name}</b> forfeited! (-10 pts)\n\nYour accumulated points are valid.", parse_mode='HTML')
+    await update.message.reply_text(f"⛔ <b>You forfeited!</b> (-10 pts)\n\nYour accumulated points are valid.", parse_mode='HTML')
     
     game.next_turn()
     
     if len(game.eliminated_players) >= len(game.players) - 1:
-        await update.message.reply_text("🏁 <b>Game Over!</b> Only one player remains!")
+        winner = next((p for p in game.players if p['id'] not in game.eliminated_players), None)
+        if winner:
+            await update.message.reply_text(f"🏆 <b>GAME OVER!</b>\n\n👑 <b>Winner:</b> [user](tg://user?id={winner['id']})", parse_mode='MarkdownV2')
         game.reset()
         return
     
@@ -542,10 +546,10 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     turn_time = game.get_turn_time()
     game.current_turn_user_id = next_player['id']
     await update.message.reply_text(
-        f"👉 <b>{next_player['name']}</b>'s Turn\n"
-        f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-        f"⏱️ <b>Time: {turn_time}s</b>",
-        parse_mode='HTML'
+        f"👉 [user](tg://user?id={next_player['id']})'s Turn\n"
+        f"Target: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
+        f"⏱️ *Time: {turn_time}s*",
+        parse_mode='MarkdownV2'
     )
     
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
@@ -609,24 +613,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         streak_bonus = ""
         if current_streak >= 3:
-            streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
+            streak_bonus = f"\n🔥 *{current_streak} STREAK\\!* You're on fire\\!"
 
         difficulty_increased = game.next_turn()
         
-        msg_text = f"✅ <b>{user.first_name}</b> - '{word}' (+{len(word)} pts){streak_bonus}\n\n"
+        msg_text = f"✅ '{word}' \\(\\+{len(word)} pts\\){streak_bonus}\n\n"
         
         if difficulty_increased:
-            msg_text += f"📈 <b>DIFFICULTY INCREASED!</b> Now {game.current_word_length} letters!\n\n"
+            msg_text += f"📈 *DIFFICULTY INCREASED\\!* Now *{game.current_word_length} letters\\!*\n\n"
         
         next_player = game.players[game.current_player_index]
         turn_time = game.get_turn_time()
         game.current_turn_user_id = next_player['id']
         
-        msg_text += f"👉 <b>{next_player['name']}</b>'s Turn\n"
-        msg_text += f"Target: <b>{game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-        msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
+        msg_text += f"👉 [user](tg://user?id={next_player['id']})'s Turn\n"
+        msg_text += f"Target: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
+        msg_text += f"⏱️ *Time: {turn_time}s*"
 
-        await update.message.reply_text(msg_text, parse_mode='HTML')
+        await update.message.reply_text(msg_text, parse_mode='MarkdownV2')
         game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
     except Exception as e:
         logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
