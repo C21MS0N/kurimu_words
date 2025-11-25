@@ -637,13 +637,16 @@ async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /buy_hint, /buy_skip, or /buy_rebound")
-        return
+    message_text = update.message.text.lower()
     
-    boost_type = context.args[0].lower()
-    if boost_type not in SHOP_BOOSTS:
-        await update.message.reply_text("❌ Invalid boost! Use: hint, skip, or rebound")
+    boost_type = None
+    for boost in SHOP_BOOSTS.keys():
+        if f"/buy_{boost}" in message_text:
+            boost_type = boost
+            break
+    
+    if not boost_type:
+        await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, or /buy_rebound")
         return
     
     price = SHOP_BOOSTS[boost_type]['price']
