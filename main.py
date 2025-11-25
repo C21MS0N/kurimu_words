@@ -83,9 +83,17 @@ class DatabaseManager:
                 user_id INTEGER PRIMARY KEY,
                 hint_count INTEGER DEFAULT 0,
                 skip_count INTEGER DEFAULT 0,
-                rebound_count INTEGER DEFAULT 0
+                rebound_count INTEGER DEFAULT 0,
+                balance INTEGER DEFAULT 0
             )
         ''')
+        
+        # Add balance column if it doesn't exist (migration)
+        try:
+            c.execute("ALTER TABLE inventory ADD COLUMN balance INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
         conn.commit()
         conn.close()
 
@@ -128,6 +136,13 @@ class DatabaseManager:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', 
                 (user_id, username, 1, word, len(word), streak, len(word), float(len(word))))
 
+        # Add points to shop balance (currency)
+        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
+        if not c.fetchone():
+            c.execute("INSERT INTO inventory (user_id, balance) VALUES (?, ?)", (user_id, len(word)))
+        else:
+            c.execute("UPDATE inventory SET balance = balance + ? WHERE user_id=?", (len(word), user_id))
+
         conn.commit()
         conn.close()
 
@@ -166,7 +181,7 @@ class DatabaseManager:
     def get_balance(self, user_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        c.execute("SELECT total_score FROM leaderboard WHERE user_id=?", (user_id,))
+        c.execute("SELECT balance FROM inventory WHERE user_id=?", (user_id,))
         result = c.fetchone()
         conn.close()
         return result[0] if result else 0
@@ -186,11 +201,11 @@ class DatabaseManager:
         balance = self.get_balance(user_id)
         if balance < price: return False
         
-        c.execute("UPDATE leaderboard SET total_score = total_score - ? WHERE user_id=?", (price, user_id))
         c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
         if not c.fetchone():
             c.execute("INSERT INTO inventory (user_id) VALUES (?)", (user_id,))
         
+        c.execute("UPDATE inventory SET balance = balance - ? WHERE user_id=?", (price, user_id))
         col = f"{boost_type}_count"
         c.execute(f"UPDATE inventory SET {col} = {col} + 1 WHERE user_id=?", (user_id,))
         conn.commit()
