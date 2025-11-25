@@ -564,16 +564,25 @@ async def mystats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📊 You haven't played any games yet! Join a /lobby to start.")
         return
 
-    # Adjusted indices because hints/skips columns were removed from DB
-    await update.message.reply_text(
+    stats_text = (
         f"📊 <b>{user.first_name}'s Stats</b>\n\n"
         f"🎯 Total Score: <b>{stats[7]}</b>\n"
         f"📝 Words Played: <b>{stats[2]}</b>\n"
         f"📏 Avg Word Length: <b>{stats[8]:.1f}</b>\n"
         f"🏆 Longest Word: <b>{stats[4]}</b> ({stats[5]} letters)\n"
-        f"🔥 Best Streak: <b>{stats[6]}</b>",
-        parse_mode='HTML'
+        f"🔥 Best Streak: <b>{stats[6]}</b>"
     )
+
+    try:
+        profile_photos = await context.bot.get_user_profile_photos(user.id, limit=1)
+        if profile_photos.photos:
+            photo = profile_photos.photos[0][-1]
+            await update.message.reply_photo(photo=photo, caption=stats_text, parse_mode='HTML')
+        else:
+            await update.message.reply_text(stats_text, parse_mode='HTML')
+    except Exception as e:
+        logger.error(f"Error fetching profile photo: {str(e)}")
+        await update.message.reply_text(stats_text, parse_mode='HTML')
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
