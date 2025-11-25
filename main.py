@@ -854,26 +854,35 @@ if __name__ == '__main__':
     if BOT_TOKEN == "REPLACE_WITH_TOKEN_IF_NOT_USING_SECRETS":
         print("ERROR: Please set up the BOT_TOKEN in Secrets or paste it in the code.")
     else:
-        application = ApplicationBuilder().token(BOT_TOKEN).build()
-        
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("lobby", lobby))
-        application.add_handler(CommandHandler("join", join))
-        application.add_handler(CommandHandler("begin", begin_game))
-        application.add_handler(CommandHandler("difficulty", difficulty))
-        application.add_handler(CommandHandler("stop", stop_game))
-        application.add_handler(CommandHandler("forfeit", forfeit_command))
-        application.add_handler(CommandHandler("mystats", mystats_command))
-        application.add_handler(CommandHandler("leaderboard", leaderboard))
-        application.add_handler(CommandHandler("shop", shop_command))
-        application.add_handler(CommandHandler("buy_hint", buy_boost_command))
-        application.add_handler(CommandHandler("buy_skip", buy_boost_command))
-        application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
-        application.add_handler(CommandHandler("hint", hint_boost_command))
-        application.add_handler(CommandHandler("skip_boost", skip_boost_command))
-        application.add_handler(CommandHandler("rebound", rebound_boost_command))
-        application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+        while True:
+            try:
+                application = ApplicationBuilder().token(BOT_TOKEN).build()
+                
+                application.add_handler(CommandHandler("start", start))
+                application.add_handler(CommandHandler("lobby", lobby))
+                application.add_handler(CommandHandler("join", join))
+                application.add_handler(CommandHandler("begin", begin_game))
+                application.add_handler(CommandHandler("difficulty", difficulty))
+                application.add_handler(CommandHandler("stop", stop_game))
+                application.add_handler(CommandHandler("forfeit", forfeit_command))
+                application.add_handler(CommandHandler("mystats", mystats_command))
+                application.add_handler(CommandHandler("leaderboard", leaderboard))
+                application.add_handler(CommandHandler("shop", shop_command))
+                application.add_handler(CommandHandler("buy_hint", buy_boost_command))
+                application.add_handler(CommandHandler("buy_skip", buy_boost_command))
+                application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
+                application.add_handler(CommandHandler("hint", hint_boost_command))
+                application.add_handler(CommandHandler("skip_boost", skip_boost_command))
+                application.add_handler(CommandHandler("rebound", rebound_boost_command))
+                application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-        logger.info(f"Loaded dictionary words")
-        print("🎮 Bot is running with enhanced features!")
-        application.run_polling()
+                logger.info(f"Loaded dictionary words")
+                print("🎮 Bot is running with enhanced features!")
+                application.run_polling()
+            except KeyboardInterrupt:
+                print("Bot stopped by user.")
+                break
+            except Exception as e:
+                logger.error(f"Bot crashed: {str(e)}", exc_info=True)
+                print(f"Bot encountered an error: {e}. Restarting in 5 seconds...")
+                time.sleep(5)
