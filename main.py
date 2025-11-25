@@ -223,6 +223,17 @@ class DatabaseManager:
         c.execute(f"UPDATE inventory SET {col} = {col} - 1 WHERE user_id=?", (user_id,))
         conn.commit()
         conn.close()
+    
+    def add_balance(self, user_id, points):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
+        if not c.fetchone():
+            c.execute("INSERT INTO inventory (user_id, balance) VALUES (?, ?)", (user_id, points))
+        else:
+            c.execute("UPDATE inventory SET balance = balance + ? WHERE user_id=?", (points, user_id))
+        conn.commit()
+        conn.close()
 
 # ==========================================
 # GAME LOGIC
@@ -787,6 +798,59 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(f"🔄 @{user.username} rebounded\\!\n\n👉 @{next_player['username']}'s Turn \\(SAME QUESTION\\)\nTarget: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
+async def inventory_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    inventory = db.get_inventory(user.id)
+    balance = db.get_balance(user.id)
+    
+    text = f"📦 <b>{user.first_name}'s Inventory</b>\n\n"
+    text += f"💰 Balance: <b>{balance} pts</b>\n\n"
+    text += "<b>Boosts Owned:</b>\n"
+    text += f"📖 Hints: <b>{inventory['hint']}</b>\n"
+    text += f"⏭️ Skips: <b>{inventory['skip']}</b>\n"
+    text += f"🔄 Rebounds: <b>{inventory['rebound']}</b>\n\n"
+    text += "Visit /shop to buy more boosts!"
+    
+    await update.message.reply_text(text, parse_mode='HTML')
+
+async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    if update.effective_chat.type == 'private':
+        await update.message.reply_text("❌ This command only works in group chats!")
+        return
+    
+    try:
+        chat_member = await context.bot.get_chat_member(chat_id, user.id)
+        is_admin = chat_member.status in ['creator', 'administrator']
+    except:
+        is_admin = False
+    
+    if not is_admin:
+        await update.message.reply_text("❌ Only group admins can use /omnipotent!")
+        return
+    
+    if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
+        await update.message.reply_text("❌ Reply to a user's message with /omnipotent [points]\nExample: Reply to their message with /omnipotent 100")
+        return
+    
+    target_user = update.message.reply_to_message.from_user
+    points = 0
+    
+    if context.args and context.args[0].isdigit():
+        points = int(context.args[0])
+    else:
+        await update.message.reply_text("❌ Usage: Reply to a message with /omnipotent [points]\nExample: /omnipotent 100")
+        return
+    
+    if points <= 0:
+        await update.message.reply_text("❌ Points must be greater than 0!")
+        return
+    
+    db.add_balance(target_user.id, points)
+    await update.message.reply_text(f"✨ @{target_user.username} received <b>+{points} pts</b> from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id not in games or not update.message or not update.message.text: return
@@ -895,6 +959,8 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("hint", hint_boost_command))
                 application.add_handler(CommandHandler("skip_boost", skip_boost_command))
                 application.add_handler(CommandHandler("rebound", rebound_boost_command))
+                application.add_handler(CommandHandler("inventory", inventory_command))
+                application.add_handler(CommandHandler("omnipotent", omnipotent_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
                 logger.info(f"Loaded dictionary words")
