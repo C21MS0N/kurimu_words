@@ -751,6 +751,10 @@ async def hint_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❌ It's not your turn!")
         return
     
+    if game.booster_limits.get('hint', float('inf')) == -1:
+        await update.message.reply_text("❌ Hint boosts are disabled for this game!")
+        return
+    
     inventory = db.get_inventory(user.id)
     if inventory['hint'] <= 0:
         await update.message.reply_text(f"❌ No hint boosts! Buy one for {SHOP_BOOSTS['hint']['price']} pts")
@@ -775,6 +779,10 @@ async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     game = games[chat_id]
     if user.id != game.players[game.current_player_index]['id']:
         await update.message.reply_text("❌ It's not your turn!")
+        return
+    
+    if game.booster_limits.get('skip', float('inf')) == -1:
+        await update.message.reply_text("❌ Skip boosts are disabled for this game!")
         return
     
     inventory = db.get_inventory(user.id)
@@ -803,6 +811,10 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
     game = games[chat_id]
     if user.id != game.players[game.current_player_index]['id']:
         await update.message.reply_text("❌ It's not your turn!")
+        return
+    
+    if game.booster_limits.get('rebound', float('inf')) == -1:
+        await update.message.reply_text("❌ Rebound boosts are disabled for this game!")
         return
     
     inventory = db.get_inventory(user.id)
@@ -920,14 +932,16 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 continue
             key, value = arg.split('=', 1)
             key = key.strip().lower()
-            value_str = value.strip()
+            value_str = value.strip().lower()
             
-            if not value_str.isdigit():
+            if key not in game.booster_limits:
                 continue
             
-            value = int(value_str)
-            
-            if key in game.booster_limits and value >= 0:
+            if value_str == 'null':
+                game.booster_limits[key] = -1
+                updated = True
+            elif value_str.isdigit():
+                value = int(value_str)
                 if value == 0:
                     game.booster_limits[key] = float('inf')
                 else:
@@ -935,12 +949,14 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 updated = True
         
         if not updated:
-            await update.message.reply_text(f"❌ Invalid format! Use: /authority hint=2 skip=1 rebound=0")
+            await update.message.reply_text(f"❌ Invalid format! Use: /authority hint=2 skip=1 rebound=null")
             return
         
         limits_text = ""
         for booster, limit in sorted(game.booster_limits.items()):
-            if limit == float('inf'):
+            if limit == -1:
+                limits_text += f"  • {booster.capitalize()}: ❌ Disabled\n"
+            elif limit == float('inf'):
                 limits_text += f"  • {booster.capitalize()}: Unlimited\n"
             else:
                 limits_text += f"  • {booster.capitalize()}: {int(limit)} max\n"
