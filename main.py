@@ -1189,35 +1189,47 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n"
     
     try:
-        profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
-        
-        if profile_photos.photos:
-            photo_list = profile_photos.photos[0]
-            largest_photo = photo_list[-1]
+        try:
+            full_user = await context.bot.get_chat(target_user_id)
+            video_sent = False
             
-            try:
-                await context.bot.send_video(
-                    chat_id=update.effective_chat.id,
-                    video=largest_photo.file_id,
-                    caption=profile_text,
-                    parse_mode='HTML'
-                )
-            except Exception as video_err:
-                logger.info(f"Video send failed, trying photo: {video_err}")
+            if full_user.personal_chat_id:
                 try:
+                    full_user_info = await context.bot.request.post(
+                        "getFullUserInfo",
+                        data={"user_id": target_user_id}
+                    )
+                    if full_user_info.get('profile_photo') and full_user_info['profile_photo'].get('video'):
+                        video_file_id = full_user_info['profile_photo']['video']['file_id']
+                        await context.bot.send_video(
+                            chat_id=update.effective_chat.id,
+                            video=video_file_id,
+                            caption=profile_text,
+                            parse_mode='HTML'
+                        )
+                        video_sent = True
+                except Exception as e:
+                    logger.info(f"getFullUserInfo failed: {e}")
+            
+            if not video_sent:
+                profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
+                if profile_photos.photos:
+                    photo_list = profile_photos.photos[0]
+                    largest_photo = photo_list[-1]
+                    
                     await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=largest_photo.file_id,
                         caption=profile_text,
                         parse_mode='HTML'
                     )
-                except Exception as photo_err:
-                    logger.error(f"Both video and photo failed: {photo_err}")
+                else:
                     await update.message.reply_text(profile_text, parse_mode='HTML')
-        else:
+        except Exception as e:
+            logger.error(f"Error fetching profile media: {e}")
             await update.message.reply_text(profile_text, parse_mode='HTML')
     except Exception as e:
-        logger.error(f"Error fetching profile: {e}")
+        logger.error(f"Error in profile command: {e}")
         await update.message.reply_text(profile_text, parse_mode='HTML')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
