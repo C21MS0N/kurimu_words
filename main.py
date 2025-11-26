@@ -52,14 +52,23 @@ SHOP_BOOSTS = {
 # Bot Owner (for exclusive KAMI title) - Set via environment variable or hardcode here
 BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env var to your Telegram user ID
 
-# Available Titles
+# Available Titles with Dynamic Requirements
 TITLES = {
-    'legend': {'display': '👑 LEGEND 👑', 'color': '🟡'},
-    'warrior': {'display': '⚔️ WARRIOR ⚔️', 'color': '🔴'},
-    'sage': {'display': '🧙 SAGE 🧙', 'color': '🟣'},
-    'phoenix': {'display': '🔥 PHOENIX 🔥', 'color': '🟠'},
-    'shadow': {'display': '🌑 SHADOW 🌑', 'color': '⚫'},
+    'legend': {'display': '👑 LEGEND 👑', 'color': '🟡', 'requirement': 'total_score >= 1000'},
+    'warrior': {'display': '⚔️ WARRIOR ⚔️', 'color': '🔴', 'requirement': 'best_streak >= 10'},
+    'sage': {'display': '🧙 SAGE 🧙', 'color': '🟣', 'requirement': 'total_words >= 50'},
+    'phoenix': {'display': '🔥 PHOENIX 🔥', 'color': '🟠', 'requirement': 'games_played >= 10'},
+    'shadow': {'display': '🌑 SHADOW 🌑', 'color': '⚫', 'requirement': 'longest_word_length >= 12'},
     'kami': {'display': '✨ KAMI ✨', 'color': '💎', 'exclusive': True}
+}
+
+# Title Requirements (matched to title themes)
+TITLE_REQUIREMENTS = {
+    'legend': {'total_score': 1000, 'desc': '👑 Reach 1000 total points'},
+    'warrior': {'best_streak': 10, 'desc': '⚔️ Achieve 10+ word streak'},
+    'sage': {'total_words': 50, 'desc': '🧙 Submit 50+ words'},
+    'phoenix': {'games_played': 10, 'desc': '🔥 Complete 10+ games (rebirth)'},
+    'shadow': {'longest_word_length': 12, 'desc': '🌑 Find a 12+ letter word (hidden)'},
 }
 
 # ==========================================
@@ -165,6 +174,22 @@ class DatabaseManager:
         result = c.fetchone()
         conn.close()
         return set(result[0].split(',')) if result and result[0] else set()
+    
+    def check_title_unlock(self, user_id, title):
+        if title not in TITLE_REQUIREMENTS:
+            return True
+        stats = self.get_player_stats(user_id)
+        if not stats:
+            return False
+        reqs = TITLE_REQUIREMENTS[title]
+        checks = {
+            'total_score': stats[7] >= reqs.get('total_score', float('inf')),
+            'best_streak': stats[6] >= reqs.get('best_streak', float('inf')),
+            'total_words': stats[2] >= reqs.get('total_words', float('inf')),
+            'games_played': stats[3] >= reqs.get('games_played', float('inf')),
+            'longest_word_length': stats[5] >= reqs.get('longest_word_length', float('inf'))
+        }
+        return all(checks.values())
 
     def update_word_stats(self, user_id, username, word, streak=0, forfeit=False):
         conn = sqlite3.connect(self.db_name)
@@ -964,20 +989,57 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     unlocked = db.get_unlocked_titles(user.id)
     active = db.get_active_title(user.id)
+    stats = db.get_player_stats(user.id)
     
     text = "🏆 <b>Available Titles</b>\n\n"
     for title_key, title_data in TITLES.items():
         is_exclusive = title_data.get('exclusive', False)
-        is_locked = title_key not in unlocked and (not is_exclusive or user.id != BOT_OWNER_ID)
         
-        status = "🔓" if title_key in unlocked else "🔒"
+        if is_exclusive and user.id != BOT_OWNER_ID:
+            continue
+        
+        is_unlocked = title_key in unlocked or (is_exclusive and user.id == BOT_OWNER_ID)
+        status = "🔓" if is_unlocked else "🔒"
         active_mark = "⭐" if title_key == active else ""
         
         text += f"{status} {title_data['display']} {active_mark}\n"
-        if is_exclusive and user.id == BOT_OWNER_ID:
+        
+        if not is_unlocked and title_key in TITLE_REQUIREMENTS and stats:
+            req = TITLE_REQUIREMENTS[title_key]
+            text += f"  {req['desc']}\n"
+        elif is_exclusive and user.id == BOT_OWNER_ID:
             text += "  (Exclusive Owner Title)\n"
     
-    text += "\n/settitle [title] to set active\nExample: /settitle legend"
+    text += "\n/settitle [title] to activate\n/progress to see unlock status"
+    await update.message.reply_text(text, parse_mode='HTML')
+
+async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    stats = db.get_player_stats(user.id)
+    
+    if not stats:
+        await update.message.reply_text("📊 No stats yet! Play some games to unlock titles.", parse_mode='HTML')
+        return
+    
+    text = f"📊 <b>Your Progress</b>\n\n"
+    text += f"🎯 Total Score: {stats[7]}/1000 ({int(stats[7]/10)}%)\n"
+    text += f"⚔️ Best Streak: {stats[6]}/10 ({int(stats[6]/10*100)}%)\n"
+    text += f"📝 Words: {stats[2]}/50 ({int(stats[2]/50*100)}%)\n"
+    text += f"🔥 Games: {stats[3]}/10 ({int(stats[3]/10*100)}%)\n"
+    text += f"🌑 Longest Word: {stats[5]}/12 letters\n\n"
+    
+    text += "<b>Unlocked Titles:</b>\n"
+    unlocked = db.get_unlocked_titles(user.id)
+    if user.id == BOT_OWNER_ID:
+        unlocked.add('kami')
+    
+    if unlocked:
+        for t in unlocked:
+            if t in TITLES:
+                text += f"✅ {TITLES[t]['display']}\n"
+    else:
+        text += "None yet. Keep playing!\n"
+    
     await update.message.reply_text(text, parse_mode='HTML')
 
 async def settitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -993,15 +1055,23 @@ async def settitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Title '{title}' doesn't exist!")
         return
     
-    unlocked = db.get_unlocked_titles(user.id)
     is_exclusive = TITLES[title].get('exclusive', False)
     
-    if title not in unlocked and (not is_exclusive or user.id != BOT_OWNER_ID):
-        await update.message.reply_text(f"❌ You haven't unlocked '{title}' yet!")
+    if is_exclusive and user.id != BOT_OWNER_ID:
+        await update.message.reply_text(f"❌ {TITLES[title]['display']} is exclusive to the bot owner!")
         return
     
+    unlocked = db.get_unlocked_titles(user.id)
+    
+    if title not in unlocked:
+        can_unlock = db.check_title_unlock(user.id, title)
+        if not can_unlock:
+            req = TITLE_REQUIREMENTS.get(title, {})
+            await update.message.reply_text(f"❌ Requirements not met!\n{req.get('desc', '')}\n\nUse /progress to see your status")
+            return
+        db.unlock_title(user.id, title)
+    
     db.set_active_title(user.id, title)
-    db.unlock_title(user.id, title)
     await update.message.reply_text(f"✅ Title set to {TITLES[title]['display']}")
 
 async def mytitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1200,6 +1270,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("achievements", achievements_command))
                 application.add_handler(CommandHandler("settitle", settitle_command))
                 application.add_handler(CommandHandler("mytitle", mytitle_command))
+                application.add_handler(CommandHandler("progress", progress_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
                 logger.info("Loaded dictionary words")
