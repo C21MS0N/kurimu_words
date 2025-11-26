@@ -918,17 +918,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 # WEB SERVER FOR UPTIMEBOT PINGS (Port 5000)
 # ==========================================
+import logging as logging_module
+logging_module.getLogger('werkzeug').setLevel(logging_module.ERROR)
+
 from werkzeug.serving import make_server
 
 app = Flask(__name__)
 
 @app.route('/')
 def health():
-    return "Bot is online", 200
+    return "OK", 200
 
 def run_web_server():
-    server = make_server('0.0.0.0', 5000, app, threaded=True)
-    server.serve_forever()
+    try:
+        server = make_server('0.0.0.0', 5000, app, threaded=True)
+        server.serve_forever()
+    except Exception as e:
+        logger.error(f"Web server error: {e}")
 
 # ==========================================
 # MAIN EXECUTION
