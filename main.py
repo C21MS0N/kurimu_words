@@ -1407,26 +1407,31 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'shadow': ('🌑', '🌑')
     }
     
-    left_border, right_border = borders.get(active_title, ('•', '•'))
+    border_char = borders.get(active_title, ('•', '•'))[0]
     
-    profile_text = f"{left_border} <b>PROFILE</b> {right_border}\n"
-    profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n\n"
+    # Beautiful top border
+    profile_text = f"{'═' * 28}\n"
+    profile_text += f"{border_char} <b>👤 PLAYER PROFILE 👤</b> {border_char}\n"
+    profile_text += f"{'═' * 28}\n\n"
     
-    profile_text += f"👤 <b>{target_username}</b>\n"
+    profile_text += f"<b>➤ Username:</b> {target_username}\n"
     if active_title and active_title in TITLES:
-        profile_text += f"👑 Title: {TITLES[active_title]['display']}\n\n"
+        profile_text += f"<b>➤ Title:</b> {TITLES[active_title]['display']}\n\n"
     else:
-        profile_text += f"👑 Title: None\n\n"
+        profile_text += f"<b>➤ Title:</b> 🔒 Locked\n\n"
     
-    profile_text += f"🎯 Total Score: <b>{stats[7]}</b>\n"
-    profile_text += f"📝 Words Played: <b>{stats[2]}</b>\n"
-    profile_text += f"⚔️ Best Streak: <b>{stats[6]}</b>\n"
-    profile_text += f"🎮 Games Played: <b>{stats[3]}</b>\n"
-    profile_text += f"🌑 Longest Word: <b>{stats[4]}</b> ({stats[5]} letters)\n"
-    profile_text += f"📊 Avg Word Length: <b>{stats[8]:.1f}</b>\n\n"
+    # Stats section with visual separators
+    profile_text += f"┌─ <b>📊 STATISTICS</b> ─┐\n"
+    profile_text += f"│ 🎯 Total Score: <b>{stats[7]}</b>\n"
+    profile_text += f"│ 📝 Words Played: <b>{stats[2]}</b>\n"
+    profile_text += f"│ ⚡ Best Streak: <b>{stats[6]}</b>\n"
+    profile_text += f"│ 🎮 Games Played: <b>{stats[3]}</b>\n"
+    profile_text += f"│ 📏 Longest Word: <b>{stats[4]}</b> ({stats[5]} letters)\n"
+    profile_text += f"│ 📈 Avg Word Length: <b>{stats[8]:.1f}</b>\n"
+    profile_text += f"└────────────────────┘\n\n"
     
-    profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n"
-    profile_text += f"{left_border} <b>ACHIEVEMENTS</b> {right_border}\n"
+    # Achievements section
+    profile_text += f"┌─ <b>🏆 ACHIEVEMENTS</b> ─┐\n"
     
     unlocked = db.get_unlocked_titles(target_user_id)
     if target_user_id == BOT_OWNER_ID:
@@ -1435,11 +1440,12 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if unlocked:
         for t in unlocked:
             if t in TITLES:
-                profile_text += f"✅ {TITLES[t]['display']}\n"
+                profile_text += f"│ ✨ {TITLES[t]['display']}\n"
     else:
-        profile_text += "🔒 None yet\n"
+        profile_text += "│ 🔒 No achievements yet\n"
     
-    profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n"
+    profile_text += f"└────────────────────┘\n"
+    profile_text += f"{'═' * 28}\n"
     
     try:
         profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
