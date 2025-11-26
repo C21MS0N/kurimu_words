@@ -774,8 +774,12 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.is_lobby_open = False
     game.is_running = True
 
-    import string
-    game.current_start_letter = random.choice(string.ascii_lowercase)
+    # Initialize first challenge from sequence
+    challenge_length, challenge_letter = CHALLENGE_SEQUENCE[0]
+    game.current_word_length = challenge_length
+    game.current_start_letter = challenge_letter
+    game.challenge_index = 1
+    
     game.turn_start_time = time.time()
     current_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
