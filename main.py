@@ -918,22 +918,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 # WEB SERVER FOR UPTIMEBOT PINGS
 # ==========================================
-import logging as logging_sys
-log = logging_sys.getLogger('werkzeug')
-log.setLevel(logging_sys.ERROR)
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
 
-app = Flask(__name__)
-app.config['ENV'] = 'production'
-
-@app.route('/')
-def home():
-    return "🎮 Telegram Word Game Bot is online!", 200
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain; charset=utf-8')
+            self.send_header('Connection', 'close')
+            self.end_headers()
+            response = 'Bot is online!'.encode('utf-8')
+            self.wfile.write(response)
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        pass
 
 def run_web_server():
     try:
-        app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False, threaded=True)
+        server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
+        server.serve_forever()
     except Exception as e:
-        logger.error(f"Flask server error: {e}")
+        logger.error(f"HTTP server error: {e}")
 
 # ==========================================
 # MAIN EXECUTION
