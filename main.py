@@ -617,7 +617,7 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"📢 <b>Lobby Opened!</b>\n\n"
-        f"{display_name} has joined.\n"
+        f"@{display_name} has joined.\n"
         f"Waiting for others... Type /join to play!",
         parse_mode='HTML'
     )
@@ -639,7 +639,7 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     display_name = user.first_name if user.first_name else (user.username if user.username else "Player")
     game.players.append({'id': user.id, 'name': display_name, 'username': display_name})
     game.initialize_player_stats(user.id)
-    await update.message.reply_text(f"✅ {display_name} joined! (Total: {len(game.players)})", parse_mode='HTML')
+    await update.message.reply_text(f"✅ @{display_name} joined! (Total: {len(game.players)})", parse_mode='HTML')
 
 async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
