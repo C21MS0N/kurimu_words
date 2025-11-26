@@ -49,6 +49,19 @@ SHOP_BOOSTS = {
     'rebound': {'price': 250, 'description': '🔄 Skip & pass same question to next player'}
 }
 
+# Bot Owner (for exclusive KAMI title)
+BOT_OWNER_ID = 1234567890  # Will be updated dynamically
+
+# Available Titles
+TITLES = {
+    'legend': {'display': '👑 LEGEND 👑', 'color': '🟡'},
+    'warrior': {'display': '⚔️ WARRIOR ⚔️', 'color': '🔴'},
+    'sage': {'display': '🧙 SAGE 🧙', 'color': '🟣'},
+    'phoenix': {'display': '🔥 PHOENIX 🔥', 'color': '🟠'},
+    'shadow': {'display': '🌑 SHADOW 🌑', 'color': '⚫'},
+    'kami': {'display': '✨ KAMI ✨', 'color': '💎', 'exclusive': True}
+}
+
 # ==========================================
 # LOGGING SETUP
 # ==========================================
@@ -100,8 +113,58 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass  # Column already exists
         
+        # Create titles table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS titles (
+                user_id INTEGER PRIMARY KEY,
+                active_title TEXT DEFAULT '',
+                unlocked_titles TEXT DEFAULT ''
+            )
+        ''')
+        
         conn.commit()
         conn.close()
+    
+    def get_active_title(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT active_title FROM titles WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        return result[0] if result else ''
+    
+    def set_active_title(self, user_id, title):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT * FROM titles WHERE user_id=?", (user_id,))
+        if not c.fetchone():
+            c.execute("INSERT INTO titles (user_id, active_title) VALUES (?, ?)", (user_id, title))
+        else:
+            c.execute("UPDATE titles SET active_title = ? WHERE user_id=?", (title, user_id))
+        conn.commit()
+        conn.close()
+    
+    def unlock_title(self, user_id, title):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT unlocked_titles FROM titles WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        if not result:
+            c.execute("INSERT INTO titles (user_id, unlocked_titles) VALUES (?, ?)", (user_id, title))
+        else:
+            unlocked = set(result[0].split(',')) if result[0] else set()
+            unlocked.add(title)
+            c.execute("UPDATE titles SET unlocked_titles = ? WHERE user_id=?", (','.join(unlocked), user_id))
+        conn.commit()
+        conn.close()
+    
+    def get_unlocked_titles(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT unlocked_titles FROM titles WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        return set(result[0].split(',')) if result and result[0] else set()
 
     def update_word_stats(self, user_id, username, word, streak=0, forfeit=False):
         conn = sqlite3.connect(self.db_name)
@@ -448,6 +511,14 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
 # ==========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global BOT_OWNER_ID
+    user = update.effective_user
+    
+    # Set owner on first use
+    if BOT_OWNER_ID == 1234567890:
+        BOT_OWNER_ID = user.id
+        db.unlock_title(user.id, 'kami')
+    
     await update.message.reply_text(
         "🎮 <b>Welcome to the Infinite Word Game!</b>\n\n"
         "📋 <b>Game Commands:</b>\n"
@@ -466,11 +537,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📊 <b>Stats & Leaderboard:</b>\n"
         "/mystats - View your personal stats\n"
         "/leaderboard [score/words/streak/longest] - Top players\n\n"
+        "🏆 <b>Achievements & Titles:</b>\n"
+        "/achievements - View all available titles\n"
+        "/settitle [title] - Set your active title\n"
+        "/mytitle - View your current title\n\n"
         "💡 <b>Features:</b>\n"
         "• Streak tracking & combo bonuses\n"
         "• Three difficulty modes\n"
         "• Comprehensive player statistics\n"
-        "• Shop system with purchasable boosts\n",
+        "• Stylized achievement titles\n",
         parse_mode='HTML'
     )
 
@@ -887,6 +962,61 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     db.add_balance(target_user.id, points)
     await update.message.reply_text(f"✨ @{target_user.username} received <b>+{points} pts</b> from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
 
+async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    unlocked = db.get_unlocked_titles(user.id)
+    active = db.get_active_title(user.id)
+    
+    text = "🏆 <b>Available Titles</b>\n\n"
+    for title_key, title_data in TITLES.items():
+        is_exclusive = title_data.get('exclusive', False)
+        is_locked = title_key not in unlocked and (not is_exclusive or user.id != BOT_OWNER_ID)
+        
+        status = "🔓" if title_key in unlocked else "🔒"
+        active_mark = "⭐" if title_key == active else ""
+        
+        text += f"{status} {title_data['display']} {active_mark}\n"
+        if is_exclusive and user.id == BOT_OWNER_ID:
+            text += "  (Exclusive Owner Title)\n"
+    
+    text += "\n/settitle [title] to set active\nExample: /settitle legend"
+    await update.message.reply_text(text, parse_mode='HTML')
+
+async def settitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /settitle [title]\nExample: /settitle legend")
+        return
+    
+    title = context.args[0].lower()
+    
+    if title not in TITLES:
+        await update.message.reply_text(f"❌ Title '{title}' doesn't exist!")
+        return
+    
+    unlocked = db.get_unlocked_titles(user.id)
+    is_exclusive = TITLES[title].get('exclusive', False)
+    
+    if title not in unlocked and (not is_exclusive or user.id != BOT_OWNER_ID):
+        await update.message.reply_text(f"❌ You haven't unlocked '{title}' yet!")
+        return
+    
+    db.set_active_title(user.id, title)
+    db.unlock_title(user.id, title)
+    await update.message.reply_text(f"✅ Title set to {TITLES[title]['display']}")
+
+async def mytitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    active = db.get_active_title(user.id)
+    
+    if not active or active not in TITLES:
+        await update.message.reply_text("❌ You don't have an active title! Use /settitle [title]")
+        return
+    
+    title_data = TITLES[active]
+    await update.message.reply_text(f"👤 Your Title: {title_data['display']}", parse_mode='HTML')
+
 async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = update.effective_user
@@ -1069,6 +1199,9 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("inventory", inventory_command))
                 application.add_handler(CommandHandler("omnipotent", omnipotent_command))
                 application.add_handler(CommandHandler("authority", authority_command))
+                application.add_handler(CommandHandler("achievements", achievements_command))
+                application.add_handler(CommandHandler("settitle", settitle_command))
+                application.add_handler(CommandHandler("mytitle", mytitle_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
                 logger.info("Loaded dictionary words")
