@@ -918,31 +918,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 # WEB SERVER FOR UPTIMEBOT PINGS
 # ==========================================
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import json
-
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain; charset=utf-8')
-            self.send_header('Connection', 'close')
-            self.end_headers()
-            response = 'Bot is online!'.encode('utf-8')
-            self.wfile.write(response)
-        else:
-            self.send_response(404)
-            self.end_headers()
-    
-    def log_message(self, format, *args):
-        pass
+import socket
 
 def run_web_server():
-    try:
-        server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
-        server.serve_forever()
-    except Exception as e:
-        logger.error(f"HTTP server error: {e}")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('0.0.0.0', 8080))
+    sock.listen(5)
+    sock.settimeout(1.0)
+    
+    while True:
+        try:
+            client, addr = sock.accept()
+            try:
+                request = client.recv(1024).decode('utf-8', errors='ignore')
+                if 'GET' in request:
+                    response = b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\nConnection: close\r\n\r\nBot is alive'
+                    client.send(response)
+            except:
+                pass
+            finally:
+                client.close()
+        except socket.timeout:
+            continue
+        except Exception as e:
+            logger.error(f"Server error: {e}")
+            break
 
 # ==========================================
 # MAIN EXECUTION
