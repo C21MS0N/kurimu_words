@@ -880,52 +880,78 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     if chat_id not in games:
-        await update.message.reply_text("❌ No game lobby active! Type /lobby to start one.")
+        await update.message.reply_text(
+            "❌ No lobby open! Steps:\n"
+            "1. Type /lobby\n"
+            "2. Then use /authority hint=2 skip=1 rebound=0",
+            parse_mode='HTML'
+        )
         return
     
     game = games[chat_id]
     
-    if game.group_owner != user.id:
-        await update.message.reply_text("❌ Only the group owner (who opened the lobby) can use /authority!")
+    if not game.is_lobby_open and not game.is_running:
+        await update.message.reply_text(
+            "❌ No active lobby! Type /lobby first.",
+            parse_mode='HTML'
+        )
         return
     
-    if not context.args:
+    if game.group_owner != user.id:
+        await update.message.reply_text(
+            f"❌ Only the lobby owner can use /authority!",
+            parse_mode='HTML'
+        )
+        return
+    
+    if not context.args or len(context.args) == 0:
         await update.message.reply_text(
             "📋 <b>Usage:</b> /authority hint=X skip=Y rebound=Z\n\n"
             "<b>Example:</b> /authority hint=2 skip=1 rebound=0\n\n"
-            "Sets max boosters allowed per game round.\n"
-            "Use 0 to disable, or any positive number to limit usage.",
+            "Sets max boosters per round. 0 = unlimited",
             parse_mode='HTML'
         )
         return
     
     try:
+        updated = False
         for arg in context.args:
             if '=' not in arg:
                 continue
             key, value = arg.split('=', 1)
             key = key.strip().lower()
-            value = int(value.strip())
+            value_str = value.strip()
+            
+            if not value_str.isdigit():
+                continue
+            
+            value = int(value_str)
             
             if key in game.booster_limits and value >= 0:
                 if value == 0:
                     game.booster_limits[key] = float('inf')
                 else:
                     game.booster_limits[key] = value
+                updated = True
+        
+        if not updated:
+            await update.message.reply_text(f"❌ Invalid format! Use: /authority hint=2 skip=1 rebound=0")
+            return
         
         limits_text = ""
-        for booster, limit in game.booster_limits.items():
+        for booster, limit in sorted(game.booster_limits.items()):
             if limit == float('inf'):
                 limits_text += f"  • {booster.capitalize()}: Unlimited\n"
             else:
-                limits_text += f"  • {booster.capitalize()}: {limit} max\n"
+                limits_text += f"  • {booster.capitalize()}: {int(limit)} max\n"
         
         await update.message.reply_text(
             f"✅ <b>Booster Limits Set!</b>\n\n{limits_text}",
             parse_mode='HTML'
         )
     except Exception as e:
-        await update.message.reply_text(f"❌ Invalid format! Example: /authority hint=2 skip=1 rebound=0")
+        logger.error(f"Authority command error: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Error! Use: /authority hint=2 skip=1 rebound=0")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
