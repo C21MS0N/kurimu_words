@@ -928,42 +928,12 @@ app.logger.disabled = True
 def health():
     return "OK", 200
 
-def run_bot_polling():
-    """Run the Telegram bot in a background thread"""
-    while True:
-        try:
-            application = ApplicationBuilder().token(BOT_TOKEN).build()
-            
-            application.add_handler(CommandHandler("start", start))
-            application.add_handler(CommandHandler("lobby", lobby))
-            application.add_handler(CommandHandler("join", join))
-            application.add_handler(CommandHandler("begin", begin_game))
-            application.add_handler(CommandHandler("difficulty", difficulty))
-            application.add_handler(CommandHandler("stop", stop_game))
-            application.add_handler(CommandHandler("forfeit", forfeit_command))
-            application.add_handler(CommandHandler("mystats", mystats_command))
-            application.add_handler(CommandHandler("leaderboard", leaderboard))
-            application.add_handler(CommandHandler("shop", shop_command))
-            application.add_handler(CommandHandler("buy_hint", buy_boost_command))
-            application.add_handler(CommandHandler("buy_skip", buy_boost_command))
-            application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
-            application.add_handler(CommandHandler("hint", hint_boost_command))
-            application.add_handler(CommandHandler("skip_boost", skip_boost_command))
-            application.add_handler(CommandHandler("rebound", rebound_boost_command))
-            application.add_handler(CommandHandler("inventory", inventory_command))
-            application.add_handler(CommandHandler("omnipotent", omnipotent_command))
-            application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-
-            logger.info(f"Loaded dictionary words")
-            print("🎮 Bot is running with enhanced features!")
-            application.run_polling()
-        except KeyboardInterrupt:
-            print("Bot stopped by user.")
-            break
-        except Exception as e:
-            logger.error(f"Bot crashed: {str(e)}", exc_info=True)
-            print(f"Bot encountered an error: {e}. Restarting in 5 seconds...")
-            time.sleep(5)
+def run_flask_server():
+    """Run Flask in a background thread - it doesn't need signal handlers"""
+    try:
+        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)
+    except Exception as e:
+        logger.error(f"Flask error: {e}")
 
 # ==========================================
 # MAIN EXECUTION
@@ -974,11 +944,44 @@ if __name__ == '__main__':
     else:
         print("🚀 Initializing Telegram Word Game Bot...", flush=True)
         
-        # Start bot in background thread
-        bot_thread = Thread(target=run_bot_polling, daemon=True)
-        bot_thread.start()
-        print("✅ Bot thread started", flush=True)
-        
-        # Run Flask server as main application (blocks here)
+        # Start Flask in background daemon thread (non-blocking)
         print("🌐 Starting Flask health server on 0.0.0.0:5000...", flush=True)
-        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+        flask_thread = Thread(target=run_flask_server, daemon=True)
+        flask_thread.start()
+        print("✅ Flask thread started", flush=True)
+        
+        # Run bot as main application (requires main thread for signal handlers)
+        while True:
+            try:
+                application = ApplicationBuilder().token(BOT_TOKEN).build()
+                
+                application.add_handler(CommandHandler("start", start))
+                application.add_handler(CommandHandler("lobby", lobby))
+                application.add_handler(CommandHandler("join", join))
+                application.add_handler(CommandHandler("begin", begin_game))
+                application.add_handler(CommandHandler("difficulty", difficulty))
+                application.add_handler(CommandHandler("stop", stop_game))
+                application.add_handler(CommandHandler("forfeit", forfeit_command))
+                application.add_handler(CommandHandler("mystats", mystats_command))
+                application.add_handler(CommandHandler("leaderboard", leaderboard))
+                application.add_handler(CommandHandler("shop", shop_command))
+                application.add_handler(CommandHandler("buy_hint", buy_boost_command))
+                application.add_handler(CommandHandler("buy_skip", buy_boost_command))
+                application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
+                application.add_handler(CommandHandler("hint", hint_boost_command))
+                application.add_handler(CommandHandler("skip_boost", skip_boost_command))
+                application.add_handler(CommandHandler("rebound", rebound_boost_command))
+                application.add_handler(CommandHandler("inventory", inventory_command))
+                application.add_handler(CommandHandler("omnipotent", omnipotent_command))
+                application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+
+                logger.info(f"Loaded dictionary words")
+                print("🎮 Bot is running with enhanced features!")
+                application.run_polling()
+            except KeyboardInterrupt:
+                print("Bot stopped by user.")
+                break
+            except Exception as e:
+                logger.error(f"Bot crashed: {str(e)}", exc_info=True)
+                print(f"Bot encountered an error: {e}. Restarting in 5 seconds...")
+                time.sleep(5)
