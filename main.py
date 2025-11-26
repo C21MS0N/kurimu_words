@@ -1232,9 +1232,12 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 conn = sqlite3.connect(DB_FILE)
                 c = conn.cursor()
+                
+                # Try exact match first
                 c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) = ? LIMIT 1", (search_query,))
                 result = c.fetchone()
                 
+                # Try partial match (for partial names and nicknames)
                 if not result:
                     c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) LIKE ? LIMIT 1", (f"%{search_query}%",))
                     result = c.fetchone()
