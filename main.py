@@ -503,7 +503,7 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
     else:
         await application.bot.send_message(
             chat_id=chat_id,
-            text=f"⏰ <b>TIME'S UP!</b>\n\n❌ @{current_player['username']} is eliminated!\n\n(-10 pts)\n\n<i>Points earned before elimination still count.</i>",
+            text=f"⏰ <b>TIME'S UP!</b>\n\n❌ @{current_player['username']} is eliminated due to timeout!\n\n<i>Forfeit - points earned before timeout still count.</i>",
             parse_mode='HTML'
         )
     
@@ -612,12 +612,12 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.group_owner = update.effective_user.id
 
     user = update.effective_user
-    username = user.username if user.username else user.first_name
-    game.players.append({'id': user.id, 'name': user.first_name, 'username': username})
+    display_name = user.first_name if user.first_name else (user.username if user.username else "Player")
+    game.players.append({'id': user.id, 'name': display_name, 'username': display_name})
 
     await update.message.reply_text(
         f"📢 <b>Lobby Opened!</b>\n\n"
-        f"@{username} has joined.\n"
+        f"{display_name} has joined.\n"
         f"Waiting for others... Type /join to play!",
         parse_mode='HTML'
     )
@@ -636,10 +636,10 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"👤 You are already in.")
         return
 
-    username = user.username if user.username else user.first_name
-    game.players.append({'id': user.id, 'name': user.first_name, 'username': username})
+    display_name = user.first_name if user.first_name else (user.username if user.username else "Player")
+    game.players.append({'id': user.id, 'name': display_name, 'username': display_name})
     game.initialize_player_stats(user.id)
-    await update.message.reply_text(f"✅ @{username} joined! (Total: {len(game.players)})", parse_mode='HTML')
+    await update.message.reply_text(f"✅ {display_name} joined! (Total: {len(game.players)})", parse_mode='HTML')
 
 async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -1145,7 +1145,8 @@ async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.set_difficulty(difficulty)
     game.is_running = True
     game.is_practice = True
-    game.players = [{'id': user_id, 'name': user.first_name, 'username': user.username or user.first_name}]
+    display_name = user.first_name if user.first_name else (user.username if user.username else "Player")
+    game.players = [{'id': user_id, 'name': display_name, 'username': display_name}]
     game.initialize_player_stats(user_id)
     games[chat_id] = game
     
