@@ -11,6 +11,7 @@ from typing import List, Dict, Set, Optional
 from datetime import datetime, timedelta
 from threading import Thread
 import atexit
+from io import BytesIO
 
 # Imports from the library
 from telegram import Update
@@ -1195,11 +1196,13 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             largest_photo = photo_list[-1]
             
             file = await context.bot.get_file(largest_photo.file_id)
-            await file.download_to_memory()
+            file_buffer = BytesIO()
+            await file.download_to_memory(file_buffer)
+            file_buffer.seek(0)
             
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
-                photo=file.file_id,
+                photo=file_buffer,
                 caption=profile_text,
                 parse_mode='HTML'
             )
