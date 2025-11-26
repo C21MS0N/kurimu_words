@@ -1200,12 +1200,34 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await file.download_to_memory(file_buffer)
             file_buffer.seek(0)
             
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=file_buffer,
-                caption=profile_text,
-                parse_mode='HTML'
-            )
+            is_video = file.file_path and ('.mp4' in file.file_path.lower() or '.webm' in file.file_path.lower())
+            
+            try:
+                if is_video:
+                    await context.bot.send_video(
+                        chat_id=update.effective_chat.id,
+                        video=file_buffer,
+                        caption=profile_text,
+                        parse_mode='HTML'
+                    )
+                else:
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=file_buffer,
+                        caption=profile_text,
+                        parse_mode='HTML'
+                    )
+            except Exception as send_err:
+                if 'PHOTO_INVALID_DIMENSIONS' in str(send_err) or 'wrong type' in str(send_err).lower():
+                    file_buffer.seek(0)
+                    await context.bot.send_video(
+                        chat_id=update.effective_chat.id,
+                        video=file_buffer,
+                        caption=profile_text,
+                        parse_mode='HTML'
+                    )
+                else:
+                    raise send_err
         else:
             await update.message.reply_text(profile_text, parse_mode='HTML')
     except Exception as e:
