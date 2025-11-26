@@ -616,6 +616,7 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not display_name or display_name == "None":
         display_name = "Player"
     game.players.append({'id': user.id, 'name': display_name, 'username': user.username or display_name})
+    db.ensure_player_exists(user.id, display_name)
 
     await update.message.reply_text(
         f"📢 <b>Lobby Opened!</b>\n\n"
