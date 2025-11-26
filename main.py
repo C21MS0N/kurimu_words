@@ -266,6 +266,10 @@ class GameState:
         
         self.rebound_target_letter: Optional[str] = None
         self.rebound_target_length: Optional[int] = None
+        
+        self.group_owner: Optional[int] = None
+        self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
+        self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
 
         self.load_dictionary()
 
@@ -306,6 +310,9 @@ class GameState:
         self.last_word_length = difficulty_config['start_length']
         self.difficulty_level = 0
         self.turn_start_time = None
+        self.group_owner = None
+        self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
+        self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         if self.timeout_task:
             self.timeout_task.cancel()
             self.timeout_task = None
@@ -483,6 +490,7 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     game.reset()
     game.is_lobby_open = True
+    game.group_owner = update.effective_user.id
 
     user = update.effective_user
     username = user.username if user.username else user.first_name
@@ -867,6 +875,58 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     db.add_balance(target_user.id, points)
     await update.message.reply_text(f"✨ @{target_user.username} received <b>+{points} pts</b> from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
 
+async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    if chat_id not in games:
+        await update.message.reply_text("❌ No game lobby active! Type /lobby to start one.")
+        return
+    
+    game = games[chat_id]
+    
+    if game.group_owner != user.id:
+        await update.message.reply_text("❌ Only the group owner (who opened the lobby) can use /authority!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "📋 <b>Usage:</b> /authority hint=X skip=Y rebound=Z\n\n"
+            "<b>Example:</b> /authority hint=2 skip=1 rebound=0\n\n"
+            "Sets max boosters allowed per game round.\n"
+            "Use 0 to disable, or any positive number to limit usage.",
+            parse_mode='HTML'
+        )
+        return
+    
+    try:
+        for arg in context.args:
+            if '=' not in arg:
+                continue
+            key, value = arg.split('=', 1)
+            key = key.strip().lower()
+            value = int(value.strip())
+            
+            if key in game.booster_limits and value >= 0:
+                if value == 0:
+                    game.booster_limits[key] = float('inf')
+                else:
+                    game.booster_limits[key] = value
+        
+        limits_text = ""
+        for booster, limit in game.booster_limits.items():
+            if limit == float('inf'):
+                limits_text += f"  • {booster.capitalize()}: Unlimited\n"
+            else:
+                limits_text += f"  • {booster.capitalize()}: {limit} max\n"
+        
+        await update.message.reply_text(
+            f"✅ <b>Booster Limits Set!</b>\n\n{limits_text}",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Invalid format! Example: /authority hint=2 skip=1 rebound=0")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id not in games or not update.message or not update.message.text: return
@@ -966,6 +1026,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("rebound", rebound_boost_command))
                 application.add_handler(CommandHandler("inventory", inventory_command))
                 application.add_handler(CommandHandler("omnipotent", omnipotent_command))
+                application.add_handler(CommandHandler("authority", authority_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
                 logger.info("Loaded dictionary words")
