@@ -404,10 +404,24 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
         game.reset()
         return
     
+    # Find next non-eliminated player with safety check
     next_player = game.players[game.current_player_index]
-    while next_player['id'] in game.eliminated_players:
+    max_iterations = len(game.players)
+    iterations = 0
+    while next_player['id'] in game.eliminated_players and iterations < max_iterations:
         game.next_turn()
         next_player = game.players[game.current_player_index]
+        iterations += 1
+    
+    # Verify we found a valid player
+    if next_player['id'] in game.eliminated_players:
+        game.reset()
+        await application.bot.send_message(
+            chat_id=chat_id,
+            text="❌ Game error: No valid players remaining. Game reset.",
+            parse_mode='MarkdownV2'
+        )
+        return
     
     turn_time = game.get_turn_time()
     game.current_turn_user_id = next_player['id']
