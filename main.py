@@ -478,11 +478,27 @@ games: Dict[int, GameState] = {}
 db = DatabaseManager(DB_FILE)
 
 # ==========================================
-# RATE LIMITING & CLEANUP
+# STALE MESSAGE FILTERING & RATE LIMITING & CLEANUP
 # ==========================================
+BOT_START_TIME = time.time()  # Track when bot starts to filter old messages
+STALE_MESSAGE_THRESHOLD = 5  # Ignore messages older than 5 seconds from now
 user_command_cooldowns: Dict[int, Dict[str, float]] = {}  # {user_id: {command: last_time}}
 COMMAND_COOLDOWN_SECONDS = 1  # 1 second between commands per user
 GAME_CLEANUP_INTERVAL = 3600  # Clean up games every hour
+
+def is_message_stale(update: Update) -> bool:
+    """Check if a message was sent before bot started (prevents processing offline messages)"""
+    if not update.message or not update.message.date:
+        return False
+    
+    message_timestamp = update.message.date.timestamp()
+    current_time = time.time()
+    
+    # Ignore messages older than the threshold
+    if current_time - message_timestamp > STALE_MESSAGE_THRESHOLD:
+        return True
+    
+    return False
 
 async def cleanup_old_games():
     """Periodically remove completed games from memory to prevent memory leaks"""
@@ -603,6 +619,9 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
 # ==========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_message_stale(update):
+        return
+    
     user = update.effective_user
     
     # Give KAMI title only to configured owner
@@ -640,6 +659,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_message_stale(update):
+        return
+    
     chat_id = update.effective_chat.id
     if chat_id not in games:
         games[chat_id] = GameState(chat_id=chat_id, application=context.application)
@@ -673,6 +695,9 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_message_stale(update):
+        return
+    
     chat_id = update.effective_chat.id
     user = update.effective_user
 
@@ -696,6 +721,9 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ {display_name} joined! (Total: {len(game.players)})", parse_mode='HTML')
 
 async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if is_message_stale(update):
+        return
+    
     chat_id = update.effective_chat.id
     if chat_id not in games: return
 
