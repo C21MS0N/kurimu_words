@@ -1114,6 +1114,46 @@ async def mytitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_data = TITLES[active]
     await update.message.reply_text(f"👤 Your Title: {title_data['display']}", parse_mode='HTML')
 
+async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Me vs Me - Solo practice mode"""
+    user = update.effective_user
+    user_id = user.id
+    chat_id = update.effective_chat.id
+    
+    difficulty = context.args[0].lower() if context.args else 'medium'
+    if difficulty not in DIFFICULTY_MODES:
+        await update.message.reply_text("❌ Invalid difficulty! Use: /practice easy/medium/hard")
+        return
+    
+    if chat_id in games:
+        game = games[chat_id]
+        if game.is_running or game.is_lobby_open:
+            await update.message.reply_text("❌ A game is already in progress! Use /stop first.")
+            return
+    
+    game = GameState(chat_id=chat_id, application=context.application)
+    game.set_difficulty(difficulty)
+    game.is_running = True
+    game.players = [{'id': user_id, 'name': user.first_name, 'username': user.username or user.first_name}]
+    game.initialize_player_stats(user_id)
+    games[chat_id] = game
+    
+    game.next_turn()
+    turn_time = game.get_turn_time()
+    game.current_turn_user_id = user_id
+    
+    difficulty_emoji = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
+    await update.message.reply_text(
+        f"🎮 *ME VS ME - PRACTICE MODE*\n"
+        f"Difficulty: {difficulty_emoji.get(difficulty, '🟡')} *{difficulty.upper()}*\n\n"
+        f"💪 Challenge yourself and build a streak\\!\n"
+        f"Target: *{game.current_word_length}\\-letter* word starting with *'{game.current_start_letter.upper()}'*\n"
+        f"⏱️ *Time: {turn_time}s*\n\n"
+        f"Type your word below\\!",
+        parse_mode='MarkdownV2'
+    )
+    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, user_id, context.application))
+
 async def groupdesc_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Display group chat description and rules"""
     group_description = """
@@ -1534,6 +1574,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("mytitle", mytitle_command))
                 application.add_handler(CommandHandler("progress", progress_command))
                 application.add_handler(CommandHandler("profile", profile_command))
+                application.add_handler(CommandHandler("practice", practice_command))
                 application.add_handler(CommandHandler("groupdesc", groupdesc_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
