@@ -4,9 +4,13 @@ import sqlite3
 import os
 import asyncio
 import time
+import subprocess
+import signal
+import sys
 from typing import List, Dict, Set, Optional
 from datetime import datetime, timedelta
 from threading import Thread
+import atexit
 
 # Imports from the library
 from telegram import Update
@@ -936,23 +940,79 @@ def run_flask_server():
         logger.error(f"Flask error: {e}")
 
 # ==========================================
-# MAIN EXECUTION
+# MAIN EXECUTION - UNBREAKABLE BOT WITH WATCHDOG
 # ==========================================
 if __name__ == '__main__':
     if BOT_TOKEN == "REPLACE_WITH_TOKEN_IF_NOT_USING_SECRETS":
         print("ERROR: Please set up the BOT_TOKEN in Secrets or paste it in the code.")
     else:
-        print("🚀 Initializing Telegram Word Game Bot...", flush=True)
+        print("🚀 UNBREAKABLE BOT INITIALIZED - WILL RUN UNTIL MANUALLY STOPPED", flush=True)
         
-        # Start Flask in background daemon thread (non-blocking)
-        print("🌐 Starting Flask health server on 0.0.0.0:5000...", flush=True)
-        flask_thread = Thread(target=run_flask_server, daemon=True)
-        flask_thread.start()
-        print("✅ Flask thread started", flush=True)
+        flask_process = None
+        bot_crashed = False
         
-        # Run bot as main application (requires main thread for signal handlers)
+        def cleanup():
+            """Ensure Flask process is killed on exit"""
+            global flask_process
+            if flask_process:
+                try:
+                    flask_process.kill()
+                    print("💀 Flask process terminated", flush=True)
+                except:
+                    pass
+        
+        atexit.register(cleanup)
+        
+        # Start Flask in subprocess (better isolation)
+        def start_flask():
+            global flask_process
+            print("🌐 Starting Flask health server...", flush=True)
+            try:
+                flask_code = '''
+import sys
+sys.path.insert(0, "/home/runner/workspace")
+from main import app
+app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False, threaded=True)
+'''
+                flask_process = subprocess.Popen(
+                    [sys.executable, "-c", flask_code],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                print("✅ Flask subprocess started (PID: {})".format(flask_process.pid), flush=True)
+                return flask_process
+            except Exception as e:
+                print(f"❌ Flask startup failed: {e}", flush=True)
+                return None
+        
+        # Flask watchdog thread - monitors and restarts Flask if it dies
+        def flask_watchdog():
+            global flask_process
+            while True:
+                time.sleep(10)
+                if flask_process is None or flask_process.poll() is not None:
+                    print("⚠️  Flask died! Restarting...", flush=True)
+                    if flask_process:
+                        try:
+                            flask_process.kill()
+                        except:
+                            pass
+                    flask_process = start_flask()
+        
+        # Start Flask watchdog
+        watchdog_thread = Thread(target=flask_watchdog, daemon=True)
+        watchdog_thread.start()
+        start_flask()
+        
+        # Give Flask a moment to start
+        time.sleep(2)
+        print("⏳ Flask initialization complete", flush=True)
+        
+        # Run bot on main thread with infinite retry loop
+        retry_count = 0
         while True:
             try:
+                print(f"🎮 Starting Telegram bot (attempt {retry_count + 1})...", flush=True)
                 application = ApplicationBuilder().token(BOT_TOKEN).build()
                 
                 application.add_handler(CommandHandler("start", start))
@@ -975,13 +1035,16 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("omnipotent", omnipotent_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-                logger.info(f"Loaded dictionary words")
-                print("🎮 Bot is running with enhanced features!")
+                logger.info("Loaded dictionary words")
+                print("🎮 BOT ONLINE - RUNNING FOREVER UNTIL MANUAL STOP!", flush=True)
+                retry_count = 0
                 application.run_polling()
             except KeyboardInterrupt:
-                print("Bot stopped by user.")
-                break
+                print("\n🛑 Bot stopped by user - cleaning up...", flush=True)
+                cleanup()
+                sys.exit(0)
             except Exception as e:
-                logger.error(f"Bot crashed: {str(e)}", exc_info=True)
-                print(f"Bot encountered an error: {e}. Restarting in 5 seconds...")
-                time.sleep(5)
+                retry_count += 1
+                logger.error(f"Bot crash #{retry_count}: {str(e)}", exc_info=True)
+                print(f"💥 Bot crashed: {e} | AUTO-RESTARTING IN 3s...", flush=True)
+                time.sleep(3)
