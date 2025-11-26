@@ -50,6 +50,16 @@ SHOP_BOOSTS = {
     'rebound': {'price': 250, 'description': '🔄 Skip & pass same question to next player'}
 }
 
+# Game Challenge Sequence (length, letter) - cycles through
+CHALLENGE_SEQUENCE = [
+    (4, 'n'),   # 4+ letters starting with N
+    (6, 'c'),   # 6+ letters starting with C
+    (5, 's'),   # 5+ letters starting with S
+    (3, 'd'),   # 3+ letters starting with D
+    (7, 'p'),   # 7+ letters starting with P
+    (4, 'a'),   # 4+ letters starting with A
+]
+
 # Bot Owner (for exclusive KAMI title) - Set via environment variable or hardcode here
 BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env var to your Telegram user ID
 
@@ -389,6 +399,7 @@ class GameState:
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         self.is_practice: bool = False
         self.last_activity_time: float = time.time()  # Track for memory cleanup
+        self.challenge_index: int = 0  # Track position in challenge sequence
 
         self.load_dictionary()
 
@@ -448,20 +459,16 @@ class GameState:
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
         self.turn_count += 1
 
-        difficulty_config = DIFFICULTY_MODES[self.difficulty]
-        increment_every = difficulty_config['increment_every']
-        max_length = difficulty_config['max_length']
+        # Use challenge sequence cycling
+        challenge_length, challenge_letter = CHALLENGE_SEQUENCE[self.challenge_index % len(CHALLENGE_SEQUENCE)]
+        self.current_word_length = challenge_length
+        self.current_start_letter = challenge_letter
+        self.challenge_index += 1
 
-        difficulty_increased = False
-        if self.turn_count > 0 and self.turn_count % (len(self.players) * increment_every) == 0:
-            self.current_word_length += 1
+        difficulty_increased = self.turn_count % 6 == 0  # Mark difficulty increase every 6 turns
+        if difficulty_increased:
             self.difficulty_level += 1
-            difficulty_increased = True
-            if self.current_word_length > max_length:
-                self.current_word_length = max_length
 
-        import string
-        self.current_start_letter = random.choice(string.ascii_lowercase)
         self.turn_start_time = time.time()
         self.last_word_length = self.current_word_length
         return difficulty_increased
@@ -781,7 +788,7 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} *{game.difficulty.upper()}*\n"
         f"Players: {player_names}\n\n"
         f"👉 {str(current_player['name'])}'s turn\\!\n"
-        f"Write a *{game.current_word_length}\\-letter* word starting with *'{game.current_start_letter.upper()}'*\n"
+        f"Write a word with *{game.current_word_length}\\+* letters starting with *'{game.current_start_letter.upper()}'*\n"
         f"⏱️ *Time: {turn_time}s*",
         parse_mode='MarkdownV2'
     )
@@ -917,7 +924,7 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.current_turn_user_id = next_player['id']
     await update.message.reply_text(
         f"👉 @{next_player['username']}'s Turn\n"
-        f"Target: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
+        f"Target: *{game.current_word_length}\\+ letters* starting with *'{game.current_start_letter.upper()}'*\n"
         f"⏱️ *Time: {turn_time}s*",
         parse_mode='MarkdownV2'
     )
@@ -1076,7 +1083,7 @@ async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     turn_time = game.get_turn_time()
     game.current_turn_user_id = next_player['id']
     
-    await update.message.reply_text(f"⏭️ @{user.username} used skip boost\\!\n\n👉 @{next_player['username']}'s Turn\nTarget: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
+    await update.message.reply_text(f"⏭️ @{user.username} used skip boost\\!\n\n👉 @{next_player['username']}'s Turn\nTarget: *{game.current_word_length}\\+ letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
 async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1110,7 +1117,7 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
     turn_time = game.get_turn_time()
     game.current_turn_user_id = next_player['id']
     
-    await update.message.reply_text(f"🔄 @{user.username} rebounded\\!\n\n👉 @{next_player['username']}'s Turn \\(SAME QUESTION\\)\nTarget: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
+    await update.message.reply_text(f"🔄 @{user.username} rebounded\\!\n\n👉 @{next_player['username']}'s Turn \\(SAME QUESTION\\)\nTarget: *{game.current_word_length}\\+ letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
 async def inventory_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1321,7 +1328,7 @@ async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🎮 <b>ME VS ME - PRACTICE MODE</b>\n"
         f"Difficulty: {difficulty_emoji.get(difficulty, '🟡')} <b>{difficulty.upper()}</b>\n\n"
         f"💪 Challenge yourself and build a streak!\n"
-        f"Target: <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        f"Target: <b>{game.current_word_length}+letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
         f"⏱️ <b>Time: {turn_time}s</b>\n\n"
         f"Type your word below!",
         parse_mode='HTML'
@@ -1669,8 +1676,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     word = update.message.text.strip().lower()
 
-    if len(word) != game.current_word_length:
-        await update.message.reply_text(f"❌ Length must be {game.current_word_length}! Try again.")
+    if len(word) < game.current_word_length:
+        await update.message.reply_text(f"❌ Word must be {game.current_word_length} letters or above! Try again.")
         return
 
     if not word.startswith(game.current_start_letter):
@@ -1711,11 +1718,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if game.is_practice:
             msg_text += f"💪 <b>Next Challenge:</b>\n"
-            msg_text += f"Target: <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+            msg_text += f"Target: <b>{game.current_word_length}+letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
             msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
         else:
             msg_text += f"👉 @{next_player['username']}'s Turn\n"
-            msg_text += f"Target: <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+            msg_text += f"Target: <b>{game.current_word_length}+letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
             msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
 
         await update.message.reply_text(msg_text, parse_mode='HTML')
