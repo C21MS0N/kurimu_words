@@ -919,11 +919,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # WEB SERVER FOR UPTIMEBOT PINGS (Port 5000)
 # ==========================================
 import logging as logging_module
-logging_module.getLogger('werkzeug').setLevel(logging_module.ERROR)
+logging_module.getLogger('werkzeug').setLevel(logging_module.CRITICAL)
 
 from werkzeug.serving import make_server
 
 app = Flask(__name__)
+app.logger.disabled = True
 
 @app.route('/')
 def health():
@@ -931,9 +932,12 @@ def health():
 
 def run_web_server():
     try:
+        print("🌐 Starting Flask server on 0.0.0.0:5000...", flush=True)
         server = make_server('0.0.0.0', 5000, app, threaded=True)
+        print("🟢 Flask server listening on port 5000!", flush=True)
         server.serve_forever()
     except Exception as e:
+        print(f"❌ Web server error: {e}", flush=True)
         logger.error(f"Web server error: {e}")
 
 # ==========================================
@@ -944,9 +948,10 @@ if __name__ == '__main__':
         print("ERROR: Please set up the BOT_TOKEN in Secrets or paste it in the code.")
     else:
         # Start web server in background thread for UptimeRobot
-        web_thread = Thread(target=run_web_server, daemon=True)
+        print("🚀 Initializing Telegram Word Game Bot...", flush=True)
+        web_thread = Thread(target=run_web_server, daemon=False)
         web_thread.start()
-        print("✅ Web server started on port 5000 for UptimeRobot pings")
+        print("✅ Web server thread started", flush=True)
         
         while True:
             try:
