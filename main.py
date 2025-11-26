@@ -261,6 +261,24 @@ class DatabaseManager:
                 VALUES (?, ?, 0, 0, 0.0)''', (user_id, username))
             conn.commit()
         conn.close()
+    
+    def increment_games_played(self, user_id):
+        """Increment games_played counter when a game is completed"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT * FROM leaderboard WHERE user_id=?", (user_id,))
+        entry = c.fetchone()
+        
+        if entry:
+            new_games_played = entry[3] + 1
+            c.execute("UPDATE leaderboard SET games_played = ? WHERE user_id=?", 
+                     (new_games_played, user_id))
+        else:
+            c.execute("INSERT INTO leaderboard (user_id, games_played) VALUES (?, 1)", 
+                     (user_id,))
+        
+        conn.commit()
+        conn.close()
 
     def get_top_players(self, category='total_score', limit=10):
         conn = sqlite3.connect(self.db_name)
@@ -579,6 +597,9 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
                 text=f"🏆 *GAME OVER\\!*\n\n👑 *Winner:* @{winner['username']}",
                 parse_mode='MarkdownV2'
             )
+            # Increment games_played for all participants
+            for player in game.players:
+                db.increment_games_played(player['id'])
         game.reset()
         return
     
@@ -593,6 +614,9 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
     
     # Verify we found a valid player
     if next_player['id'] in game.eliminated_players:
+        # Increment games_played for all participants before reset
+        for player in game.players:
+            db.increment_games_played(player['id'])
         game.reset()
         await application.bot.send_message(
             chat_id=chat_id,
