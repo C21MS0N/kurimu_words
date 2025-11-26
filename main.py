@@ -615,7 +615,7 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     display_name = str(user.first_name or user.username or "Player").strip()
     if not display_name or display_name == "None":
         display_name = "Player"
-    username_to_store = user.username if user.username else display_name
+    username_to_store = (user.username if user.username else display_name).lstrip('@')
     game.players.append({'id': user.id, 'name': display_name, 'username': username_to_store})
     db.ensure_player_exists(user.id, username_to_store)
 
@@ -643,7 +643,7 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     display_name = str(user.first_name or user.username or "Player").strip()
     if not display_name or display_name == "None":
         display_name = "Player"
-    username_to_store = user.username if user.username else display_name
+    username_to_store = (user.username if user.username else display_name).lstrip('@')
     game.players.append({'id': user.id, 'name': display_name, 'username': username_to_store})
     game.initialize_player_stats(user.id)
     db.ensure_player_exists(user.id, username_to_store)
@@ -807,6 +807,12 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    chat_id = update.effective_chat.id
+    
+    if chat_id in games and games[chat_id].is_running:
+        await update.message.reply_text("❌ Cannot access shop during an active game! Finish the game first with /stop")
+        return
+    
     balance = db.get_balance(user.id)
     inventory = db.get_inventory(user.id)
     
@@ -819,7 +825,12 @@ async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    chat_id = update.effective_chat.id
     message_text = update.message.text.lower()
+    
+    if chat_id in games and games[chat_id].is_running:
+        await update.message.reply_text("❌ Cannot buy boosts during an active game! Finish the game first with /stop")
+        return
     
     boost_type = None
     for boost in SHOP_BOOSTS.keys():
