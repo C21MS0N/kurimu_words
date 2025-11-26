@@ -1113,6 +1113,82 @@ async def mytitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_data = TITLES[active]
     await update.message.reply_text(f"👤 Your Title: {title_data['display']}", parse_mode='HTML')
 
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    
+    target_user = user
+    if context.args and len(context.args) > 0:
+        search_query = context.args[0].lstrip('@').lower()
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT user_id, username FROM leaderboard WHERE username LIKE ? LIMIT 1", (f"%{search_query}%",))
+        result = c.fetchone()
+        conn.close()
+        
+        if not result:
+            await update.message.reply_text(f"❌ User not found!")
+            return
+        
+        target_user_id = result[0]
+        target_username = result[1]
+    else:
+        target_user_id = user.id
+        target_username = user.first_name if user.first_name else "Player"
+    
+    stats = db.get_player_stats(target_user_id)
+    if not stats:
+        await update.message.reply_text("❌ No stats found for this player!")
+        return
+    
+    active_title = db.get_active_title(target_user_id)
+    if target_user_id == BOT_OWNER_ID:
+        active_title = 'kami'
+    
+    borders = {
+        'kami': ('✨', '✨'),
+        'legend': ('👑', '👑'),
+        'warrior': ('⚔️', '⚔️'),
+        'sage': ('🧙', '🧙'),
+        'phoenix': ('🔥', '🔥'),
+        'shadow': ('🌑', '🌑')
+    }
+    
+    left_border, right_border = borders.get(active_title, ('•', '•'))
+    
+    profile_text = f"{left_border} <b>PROFILE</b> {right_border}\n"
+    profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n\n"
+    
+    profile_text += f"👤 <b>{target_username}</b>\n"
+    if active_title and active_title in TITLES:
+        profile_text += f"👑 Title: {TITLES[active_title]['display']}\n\n"
+    else:
+        profile_text += f"👑 Title: None\n\n"
+    
+    profile_text += f"🎯 Total Score: <b>{stats[7]}</b>\n"
+    profile_text += f"📝 Words Played: <b>{stats[2]}</b>\n"
+    profile_text += f"⚔️ Best Streak: <b>{stats[6]}</b>\n"
+    profile_text += f"🎮 Games Played: <b>{stats[3]}</b>\n"
+    profile_text += f"🌑 Longest Word: <b>{stats[4]}</b> ({stats[5]} letters)\n"
+    profile_text += f"📊 Avg Word Length: <b>{stats[8]:.1f}</b>\n\n"
+    
+    profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n"
+    profile_text += f"{left_border} <b>ACHIEVEMENTS</b> {right_border}\n"
+    
+    unlocked = db.get_unlocked_titles(target_user_id)
+    if target_user_id == BOT_OWNER_ID:
+        unlocked.add('kami')
+    
+    if unlocked:
+        for t in unlocked:
+            if t in TITLES:
+                profile_text += f"✅ {TITLES[t]['display']}\n"
+    else:
+        profile_text += "🔒 None yet\n"
+    
+    profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n"
+    
+    await update.message.reply_text(profile_text, parse_mode='HTML')
+
 async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = update.effective_user
@@ -1299,6 +1375,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("settitle", settitle_command))
                 application.add_handler(CommandHandler("mytitle", mytitle_command))
                 application.add_handler(CommandHandler("progress", progress_command))
+                application.add_handler(CommandHandler("profile", profile_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
                 logger.info("Loaded dictionary words")
