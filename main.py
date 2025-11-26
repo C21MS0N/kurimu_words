@@ -1120,24 +1120,38 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_user_id = user.id
     target_username = user.first_name if user.first_name else "Player"
     
-    if context.args and len(context.args) > 0:
-        search_query = context.args[0].lstrip('@').lower()
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) = ? OR LOWER(username) LIKE ? ORDER BY user_id DESC LIMIT 1", (search_query, f"%{search_query}%"))
-        result = c.fetchone()
-        conn.close()
-        
-        if result:
-            target_user_id = result[0]
-            target_username = result[1]
-        else:
-            await update.message.reply_text(f"❌ User '{context.args[0]}' not found in leaderboard!\n\n💡 Make sure they've played at least one game.\n\nOr reply to their message with /profile")
-            return
-    elif update.message.reply_to_message and update.message.reply_to_message.from_user:
+    if update.message.reply_to_message and update.message.reply_to_message.from_user:
         replied_user = update.message.reply_to_message.from_user
         target_user_id = replied_user.id
         target_username = replied_user.username if replied_user.username else (replied_user.first_name if replied_user.first_name else "Player")
+    elif context.args and len(context.args) > 0:
+        search_query = context.args[0].lstrip('@').lower()
+        
+        try:
+            if search_query.isdigit():
+                target_user_id = int(search_query)
+            else:
+                conn = sqlite3.connect(DB_FILE)
+                c = conn.cursor()
+                c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) = ? LIMIT 1", (search_query,))
+                result = c.fetchone()
+                
+                if not result:
+                    c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) LIKE ? LIMIT 1", (f"%{search_query}%",))
+                    result = c.fetchone()
+                
+                conn.close()
+                
+                if result:
+                    target_user_id = result[0]
+                    target_username = result[1]
+                else:
+                    await update.message.reply_text(f"❌ User '{context.args[0]}' not found!\n\n💡 Tips:\n• Make sure they've played at least one game\n• Reply to their message with /profile\n• Or use their numeric ID: /profile [user_id]")
+                    return
+        except Exception as e:
+            logger.error(f"Profile search error: {e}")
+            await update.message.reply_text(f"❌ Error searching for user!")
+            return
     
     stats = db.get_player_stats(target_user_id)
     if not stats:
