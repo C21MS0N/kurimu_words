@@ -1195,29 +1195,24 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             photo_list = profile_photos.photos[0]
             largest_photo = photo_list[-1]
             
-            file = await context.bot.get_file(largest_photo.file_id)
-            file_buffer = BytesIO()
-            await file.download_to_memory(file_buffer)
-            file_buffer.seek(0)
-            
             try:
                 await context.bot.send_video(
                     chat_id=update.effective_chat.id,
-                    video=file_buffer,
+                    video=largest_photo.file_id,
                     caption=profile_text,
                     parse_mode='HTML'
                 )
             except Exception as video_err:
+                logger.info(f"Video send failed, trying photo: {video_err}")
                 try:
-                    file_buffer.seek(0)
                     await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
-                        photo=file_buffer,
+                        photo=largest_photo.file_id,
                         caption=profile_text,
                         parse_mode='HTML'
                     )
                 except Exception as photo_err:
-                    logger.error(f"Error sending as video or photo: Video: {video_err}, Photo: {photo_err}")
+                    logger.error(f"Both video and photo failed: {photo_err}")
                     await update.message.reply_text(profile_text, parse_mode='HTML')
         else:
             await update.message.reply_text(profile_text, parse_mode='HTML')
