@@ -22,8 +22,6 @@ from telegram.ext import (
     filters,
 )
 
-# Flask for UptimeRobot pings
-from flask import Flask
 
 # ==========================================
 # CONFIGURATION
@@ -919,95 +917,52 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error processing your word. Try again.")
         game.used_words.discard(word)
 
-# ==========================================
-# WEB SERVER FOR UPTIMEBOT PINGS (Port 5000)
-# ==========================================
-import logging as logging_module
-logging_module.getLogger('werkzeug').setLevel(logging_module.CRITICAL)
-
-app = Flask(__name__)
-app.logger.disabled = True
-
-@app.route('/')
-def health():
-    return "OK", 200
-
-def run_flask_server():
-    """Run Flask in a background thread - it doesn't need signal handlers"""
-    try:
-        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)
-    except Exception as e:
-        logger.error(f"Flask error: {e}")
-
-def run_telegram_bot():
-    """Run Telegram bot with infinite retry and dedicated event loop"""
-    import signal as sig_module
-    retry_count = 0
-    
-    # Create a new event loop for this thread (avoids signal handler conflicts)
-    new_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(new_loop)
-    
-    while True:
-        try:
-            print(f"🎮 Starting Telegram bot (attempt {retry_count + 1})...", flush=True)
-            application = ApplicationBuilder().token(BOT_TOKEN).build()
-            
-            application.add_handler(CommandHandler("start", start))
-            application.add_handler(CommandHandler("lobby", lobby))
-            application.add_handler(CommandHandler("join", join))
-            application.add_handler(CommandHandler("begin", begin_game))
-            application.add_handler(CommandHandler("difficulty", difficulty))
-            application.add_handler(CommandHandler("stop", stop_game))
-            application.add_handler(CommandHandler("forfeit", forfeit_command))
-            application.add_handler(CommandHandler("mystats", mystats_command))
-            application.add_handler(CommandHandler("leaderboard", leaderboard))
-            application.add_handler(CommandHandler("shop", shop_command))
-            application.add_handler(CommandHandler("buy_hint", buy_boost_command))
-            application.add_handler(CommandHandler("buy_skip", buy_boost_command))
-            application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
-            application.add_handler(CommandHandler("hint", hint_boost_command))
-            application.add_handler(CommandHandler("skip_boost", skip_boost_command))
-            application.add_handler(CommandHandler("rebound", rebound_boost_command))
-            application.add_handler(CommandHandler("inventory", inventory_command))
-            application.add_handler(CommandHandler("omnipotent", omnipotent_command))
-            application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-
-            logger.info("Loaded dictionary words")
-            print("🎮 BOT ONLINE - RUNNING FOREVER UNTIL MANUAL STOP!", flush=True)
-            retry_count = 0
-            # Run polling with the dedicated event loop
-            new_loop.run_until_complete(application.run_polling())
-        except KeyboardInterrupt:
-            print("\n🛑 Bot stopped by user", flush=True)
-            break
-        except Exception as e:
-            retry_count += 1
-            logger.error(f"Bot crash #{retry_count}: {str(e)}", exc_info=True)
-            print(f"💥 Bot crashed: {e} | AUTO-RESTARTING IN 3s...", flush=True)
-            time.sleep(3)
-    
-    new_loop.close()
 
 # ==========================================
-# MAIN EXECUTION - FLASK AS PRIMARY WITH BOT BACKGROUND THREAD
+# MAIN EXECUTION - PURE TELEGRAM BOT (runs in separate process via run.py)
 # ==========================================
 if __name__ == '__main__':
     if BOT_TOKEN == "REPLACE_WITH_TOKEN_IF_NOT_USING_SECRETS":
         print("ERROR: Please set up the BOT_TOKEN in Secrets or paste it in the code.")
     else:
-        print("🚀 UNBREAKABLE BOT + FLASK INITIALIZED", flush=True)
+        print("🎮 Telegram Bot Started", flush=True)
         
-        # Start bot in background daemon thread (with auto-restart)
-        print("🎮 Starting Telegram bot thread...", flush=True)
-        bot_thread = Thread(target=run_telegram_bot, daemon=True)
-        bot_thread.start()
-        print("✅ Bot thread started (will auto-restart on crash)", flush=True)
-        
-        # Give bot a moment to initialize
-        time.sleep(2)
-        
-        # Run Flask as MAIN application (this is what Replit exposes to internet)
-        print("🌐 Starting Flask server on 0.0.0.0:5000 (MAIN APP)...", flush=True)
-        print("🟢 APP ONLINE - HEALTH ENDPOINT ACTIVE", flush=True)
-        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)
+        # Infinite retry loop for bot
+        retry_count = 0
+        while True:
+            try:
+                print(f"🎮 Starting Telegram bot (attempt {retry_count + 1})...", flush=True)
+                application = ApplicationBuilder().token(BOT_TOKEN).build()
+                
+                application.add_handler(CommandHandler("start", start))
+                application.add_handler(CommandHandler("lobby", lobby))
+                application.add_handler(CommandHandler("join", join))
+                application.add_handler(CommandHandler("begin", begin_game))
+                application.add_handler(CommandHandler("difficulty", difficulty))
+                application.add_handler(CommandHandler("stop", stop_game))
+                application.add_handler(CommandHandler("forfeit", forfeit_command))
+                application.add_handler(CommandHandler("mystats", mystats_command))
+                application.add_handler(CommandHandler("leaderboard", leaderboard))
+                application.add_handler(CommandHandler("shop", shop_command))
+                application.add_handler(CommandHandler("buy_hint", buy_boost_command))
+                application.add_handler(CommandHandler("buy_skip", buy_boost_command))
+                application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
+                application.add_handler(CommandHandler("hint", hint_boost_command))
+                application.add_handler(CommandHandler("skip_boost", skip_boost_command))
+                application.add_handler(CommandHandler("rebound", rebound_boost_command))
+                application.add_handler(CommandHandler("inventory", inventory_command))
+                application.add_handler(CommandHandler("omnipotent", omnipotent_command))
+                application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+
+                logger.info("Loaded dictionary words")
+                print("🎮 BOT ONLINE - RUNNING FOREVER UNTIL MANUAL STOP!", flush=True)
+                retry_count = 0
+                application.run_polling()
+            except KeyboardInterrupt:
+                print("\n🛑 Bot stopped by user", flush=True)
+                break
+            except Exception as e:
+                retry_count += 1
+                logger.error(f"Bot crash #{retry_count}: {str(e)}", exc_info=True)
+                print(f"💥 Bot crashed: {e} | AUTO-RESTARTING IN 3s...", flush=True)
+                time.sleep(3)
