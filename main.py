@@ -49,8 +49,8 @@ SHOP_BOOSTS = {
     'rebound': {'price': 250, 'description': '🔄 Skip & pass same question to next player'}
 }
 
-# Bot Owner (for exclusive KAMI title)
-BOT_OWNER_ID = 1234567890  # Will be updated dynamically
+# Bot Owner (for exclusive KAMI title) - Set via environment variable or hardcode here
+BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env var to your Telegram user ID
 
 # Available Titles
 TITLES = {
@@ -511,12 +511,10 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
 # ==========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global BOT_OWNER_ID
     user = update.effective_user
     
-    # Set owner on first use
-    if BOT_OWNER_ID == 1234567890:
-        BOT_OWNER_ID = user.id
+    # Give KAMI title only to configured owner
+    if BOT_OWNER_ID > 0 and user.id == BOT_OWNER_ID:
         db.unlock_title(user.id, 'kami')
     
     await update.message.reply_text(
