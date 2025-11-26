@@ -43,3 +43,8 @@ args = "python run.py"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+BOT_OWNER_ID = "6166074874"
