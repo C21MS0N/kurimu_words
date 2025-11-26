@@ -916,34 +916,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game.used_words.discard(word)
 
 # ==========================================
-# WEB SERVER FOR UPTIMEBOT PINGS
+# WEB SERVER FOR UPTIMEBOT PINGS (Port 5000)
 # ==========================================
-import socket
+from werkzeug.serving import make_server
 
 def run_web_server():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('0.0.0.0', 8080))
-    sock.listen(5)
-    sock.settimeout(1.0)
-    
-    while True:
-        try:
-            client, addr = sock.accept()
-            try:
-                request = client.recv(1024).decode('utf-8', errors='ignore')
-                if 'GET' in request:
-                    response = b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\nConnection: close\r\n\r\nBot is alive'
-                    client.send(response)
-            except:
-                pass
-            finally:
-                client.close()
-        except socket.timeout:
-            continue
-        except Exception as e:
-            logger.error(f"Server error: {e}")
-            break
+    server = make_server('0.0.0.0', 5000, app, threaded=True)
+    server.serve_forever()
 
 # ==========================================
 # MAIN EXECUTION
