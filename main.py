@@ -920,6 +920,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 from werkzeug.serving import make_server
 
+app = Flask(__name__)
+
+@app.route('/')
+def health():
+    return "Bot is online", 200
+
 def run_web_server():
     server = make_server('0.0.0.0', 5000, app, threaded=True)
     server.serve_forever()
@@ -934,7 +940,7 @@ if __name__ == '__main__':
         # Start web server in background thread for UptimeRobot
         web_thread = Thread(target=run_web_server, daemon=True)
         web_thread.start()
-        print("✅ Web server started on port 8080 for UptimeRobot pings")
+        print("✅ Web server started on port 5000 for UptimeRobot pings")
         
         while True:
             try:
