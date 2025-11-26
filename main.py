@@ -1114,6 +1114,45 @@ async def mytitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_data = TITLES[active]
     await update.message.reply_text(f"👤 Your Title: {title_data['display']}", parse_mode='HTML')
 
+async def groupdesc_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Display group chat description and rules"""
+    group_description = """
+🎮 <b>WORD GAME GROUP - RULES & DESCRIPTION</b>
+
+📝 <b>About This Group:</b>
+This is an interactive Telegram word game community! Players compete in turn-based word challenges to earn points, climb leaderboards, unlock achievements, and customize titles. Join lobbies, challenge friends, and build your gaming reputation!
+
+🎯 <b>Main Commands:</b>
+• /lobby - Start a new game
+• /join - Join a lobby
+• /begin - Start the game (2+ players)
+• /leaderboard - See top players
+• /mystats - Check your stats
+• /profile - View player profiles
+
+💬 <b>GROUP CHAT RULES:</b>
+✅ <b>ALLOWED:</b>
+• Friendly banter & competition
+• Sharing wins & celebrating achievements
+• General conversation between members
+• Asking for game tips & strategies
+
+❌ <b>STRICTLY PROHIBITED:</b>
+• 🚫 Invading anyone's privacy (sharing personal info without consent)
+• 🚫 Abusing members' family (parents, siblings, relatives)
+• 🚫 Harassment, insults, or disrespect toward other players
+• 🚫 Spam or off-topic spam
+
+⚠️ <b>Violations:</b>
+Repeated violations may result in removal from the group.
+
+🤝 <b>Keep it Fun & Respectful!</b>
+This group is for everyone. Let's play fair and treat each other with kindness.
+
+Questions? Use /help for game commands!
+    """
+    await update.message.reply_text(group_description, parse_mode='HTML')
+
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
@@ -1495,6 +1534,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("mytitle", mytitle_command))
                 application.add_handler(CommandHandler("progress", progress_command))
                 application.add_handler(CommandHandler("profile", profile_command))
+                application.add_handler(CommandHandler("groupdesc", groupdesc_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
