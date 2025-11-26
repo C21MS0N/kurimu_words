@@ -1714,7 +1714,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg_text = f"✅ '{word}' <b>(+{len(word)})</b>{streak_bonus}\n\n"
         
         if difficulty_increased:
-            msg_text += f"📈 <b>DIFFICULTY INCREASED!</b> Now <b>exactly {game.current_word_length} letters</b>!\n\n"
+            msg_text += f"⏱️ <b>Time reduced by 5s!</b> Difficulty level {game.difficulty_level}\n\n"
         
         next_player = game.players[game.current_player_index]
         turn_time = game.get_turn_time()
