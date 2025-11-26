@@ -615,8 +615,9 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     display_name = str(user.first_name or user.username or "Player").strip()
     if not display_name or display_name == "None":
         display_name = "Player"
-    game.players.append({'id': user.id, 'name': display_name, 'username': user.username or display_name})
-    db.ensure_player_exists(user.id, display_name)
+    username_to_store = user.username if user.username else display_name
+    game.players.append({'id': user.id, 'name': display_name, 'username': username_to_store})
+    db.ensure_player_exists(user.id, username_to_store)
 
     await update.message.reply_text(
         f"📢 <b>Lobby Opened!</b>\n\n"
@@ -642,8 +643,10 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     display_name = str(user.first_name or user.username or "Player").strip()
     if not display_name or display_name == "None":
         display_name = "Player"
-    game.players.append({'id': user.id, 'name': display_name, 'username': user.username or display_name})
+    username_to_store = user.username if user.username else display_name
+    game.players.append({'id': user.id, 'name': display_name, 'username': username_to_store})
     game.initialize_player_stats(user.id)
+    db.ensure_player_exists(user.id, username_to_store)
     await update.message.reply_text(f"✅ {display_name} joined! (Total: {len(game.players)})", parse_mode='HTML')
 
 async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
