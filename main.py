@@ -370,6 +370,7 @@ class GameState:
         self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         self.is_practice: bool = False
+        self.last_activity_time: float = time.time()  # Track for memory cleanup
 
         self.load_dictionary()
 
@@ -475,6 +476,51 @@ class GameState:
 # Key: chat_id, Value: GameState
 games: Dict[int, GameState] = {}
 db = DatabaseManager(DB_FILE)
+
+# ==========================================
+# RATE LIMITING & CLEANUP
+# ==========================================
+user_command_cooldowns: Dict[int, Dict[str, float]] = {}  # {user_id: {command: last_time}}
+COMMAND_COOLDOWN_SECONDS = 1  # 1 second between commands per user
+GAME_CLEANUP_INTERVAL = 3600  # Clean up games every hour
+
+async def cleanup_old_games():
+    """Periodically remove completed games from memory to prevent memory leaks"""
+    while True:
+        try:
+            await asyncio.sleep(GAME_CLEANUP_INTERVAL)
+            current_time = time.time()
+            games_to_delete = []
+            
+            for chat_id, game in games.items():
+                # Remove games that are not running and haven't been touched for 1 hour
+                if not game.is_running and not game.is_lobby_open:
+                    if hasattr(game, 'last_activity_time'):
+                        if current_time - game.last_activity_time > GAME_CLEANUP_INTERVAL:
+                            games_to_delete.append(chat_id)
+                    else:
+                        games_to_delete.append(chat_id)
+            
+            for chat_id in games_to_delete:
+                del games[chat_id]
+                logger.info(f"Cleaned up game state for chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Error in game cleanup task: {e}")
+
+def check_rate_limit(user_id: int, command: str) -> bool:
+    """Check if user has exceeded command rate limit"""
+    current_time = time.time()
+    
+    if user_id not in user_command_cooldowns:
+        user_command_cooldowns[user_id] = {}
+    
+    if command in user_command_cooldowns[user_id]:
+        last_use = user_command_cooldowns[user_id][command]
+        if current_time - last_use < COMMAND_COOLDOWN_SECONDS:
+            return False
+    
+    user_command_cooldowns[user_id][command] = current_time
+    return True
 
 async def handle_turn_timeout(chat_id: int, user_id: int, application):
     await asyncio.sleep(games[chat_id].get_turn_time())
@@ -830,6 +876,10 @@ async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
     
+    # Rate limiting
+    if not check_rate_limit(user.id, 'shop'):
+        return
+    
     if chat_id in games and games[chat_id].is_running:
         await update.message.reply_text("❌ Cannot access shop during an active game! Finish the game first with /stop")
         return
@@ -848,6 +898,10 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
     message_text = update.message.text.lower()
+    
+    # Rate limiting
+    if not check_rate_limit(user.id, 'buy_boost'):
+        return
     
     if chat_id in games and games[chat_id].is_running:
         await update.message.reply_text("❌ Cannot buy boosts during an active game! Finish the game first with /stop")
@@ -872,6 +926,11 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def mystats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    
+    # Rate limiting
+    if not check_rate_limit(user.id, 'mystats'):
+        return
+    
     stats = db.get_player_stats(user.id)
 
     if not stats:
@@ -902,6 +961,10 @@ async def hint_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     chat_id = update.effective_chat.id
     user = update.effective_user
     
+    # Rate limiting
+    if not check_rate_limit(user.id, 'hint'):
+        return
+    
     if chat_id not in games or not games[chat_id].is_running:
         await update.message.reply_text("❌ No active game!")
         return
@@ -931,6 +994,10 @@ async def hint_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = update.effective_user
+    
+    # Rate limiting
+    if not check_rate_limit(user.id, 'skip'):
+        return
     
     if chat_id not in games or not games[chat_id].is_running:
         await update.message.reply_text("❌ No active game!")
@@ -1251,6 +1318,10 @@ Questions? Use /help for game commands!
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
+    # Rate limiting
+    if not check_rate_limit(user.id, 'profile'):
+        return
+    
     target_user_id = user.id
     target_username = user.first_name if user.first_name else "Player"
     
@@ -1259,7 +1330,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user_id = replied_user.id
         target_username = replied_user.username if replied_user.username else (replied_user.first_name if replied_user.first_name else "Player")
     elif context.args and len(context.args) > 0:
-        search_query = context.args[0].lstrip('@').lower()
+        search_query = context.args[0].lstrip('@').lower().strip()
         
         try:
             if search_query.isdigit():
@@ -1268,13 +1339,13 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn = sqlite3.connect(DB_FILE)
                 c = conn.cursor()
                 
-                # Try exact match first
-                c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) = ? LIMIT 1", (search_query,))
+                # Try exact match first (case-insensitive)
+                c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(TRIM(username)) = ? LIMIT 1", (search_query,))
                 result = c.fetchone()
                 
                 # Try partial match (for partial names and nicknames)
                 if not result:
-                    c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) LIKE ? LIMIT 1", (f"%{search_query}%",))
+                    c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(TRIM(username)) LIKE ? LIMIT 1", (f"%{search_query}%",))
                     result = c.fetchone()
                 
                 conn.close()
