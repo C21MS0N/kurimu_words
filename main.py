@@ -1144,13 +1144,13 @@ async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     difficulty_emoji = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
     await update.message.reply_text(
-        f"🎮 *ME VS ME - PRACTICE MODE*\n"
-        f"Difficulty: {difficulty_emoji.get(difficulty, '🟡')} *{difficulty.upper()}*\n\n"
-        f"💪 Challenge yourself and build a streak\\!\n"
-        f"Target: *{game.current_word_length}\\-letter* word starting with *'{game.current_start_letter.upper()}'*\n"
-        f"⏱️ *Time: {turn_time}s*\n\n"
-        f"Type your word below\\!",
-        parse_mode='MarkdownV2'
+        f"🎮 <b>ME VS ME - PRACTICE MODE</b>\n"
+        f"Difficulty: {difficulty_emoji.get(difficulty, '🟡')} <b>{difficulty.upper()}</b>\n\n"
+        f"💪 Challenge yourself and build a streak!\n"
+        f"Target: <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        f"⏱️ <b>Time: {turn_time}s</b>\n\n"
+        f"Type your word below!",
+        parse_mode='HTML'
     )
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, user_id, context.application))
 
