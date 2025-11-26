@@ -1433,50 +1433,42 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     border_char = borders.get(active_title, ('•', '•'))[0]
     
-    # Elaborate ornate borders
-    profile_text = f"╔{'═' * 35}╗\n"
-    profile_text += f"║ ✦ ✦ ✦  <b>👤 PLAYER PROFILE 👤</b>  ✦ ✦ ✦ ║\n"
-    profile_text += f"║{' ' * 35}║\n"
-    profile_text += f"║  {border_char} <b>─ ELITE PLAYER CARD ─</b> {border_char}     ║\n"
-    profile_text += f"╚{'═' * 35}╝\n\n"
+    # Clean and beautiful profile design
+    profile_text = f"┌─ <b>👤 PLAYER PROFILE</b> {border_char} ─┐\n\n"
     
-    # Player info section
-    profile_text += f"  ▶ <b>USERNAME:</b> ‹ <b>{target_username}</b> ›\n"
+    profile_text += f"<b>NAME:</b> {target_username}\n"
     if active_title and active_title in TITLES:
-        profile_text += f"  ▶ <b>TITLE:</b> ‹ {TITLES[active_title]['display']} ›\n\n"
+        profile_text += f"<b>TITLE:</b> {TITLES[active_title]['display']}\n\n"
     else:
-        profile_text += f"  ▶ <b>TITLE:</b> ‹ 🔒 LOCKED 🔒 ›\n\n"
+        profile_text += f"<b>TITLE:</b> 🔒 Locked\n\n"
     
-    # Ornate stats section
-    profile_text += f"╔━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╗\n"
-    profile_text += f"║ ◆  <b>📊 BATTLE STATISTICS 📊</b>  ◆ ║\n"
-    profile_text += f"╠━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╣\n"
-    profile_text += f"║  🎯 Total Score.........<b>{str(stats[7]).rjust(8)}</b>  ║\n"
-    profile_text += f"║  📝 Words Played........<b>{str(stats[2]).rjust(8)}</b>  ║\n"
-    profile_text += f"║  ⚡ Best Streak.........<b>{str(stats[6]).rjust(8)}</b>  ║\n"
-    profile_text += f"║  🎮 Games Played........<b>{str(stats[3]).rjust(8)}</b>  ║\n"
-    profile_text += f"║  📏 Longest Word........<b>{stats[4]} ({stats[5]} letters)</b>\n"
-    profile_text += f"║  📈 Avg Word Length.....<b>{str(f'{stats[8]:.1f}').rjust(8)}</b>  ║\n"
-    profile_text += f"╚━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╝\n\n"
+    # Statistics section
+    profile_text += f"<b>📊 STATISTICS</b>\n"
+    profile_text += f"├ 🎯 Score: {stats[7]}\n"
+    profile_text += f"├ 📝 Words: {stats[2]}\n"
+    profile_text += f"├ ⚡ Best Streak: {stats[6]}\n"
+    profile_text += f"├ 🎮 Games: {stats[3]}\n"
+    profile_text += f"├ 📏 Longest: {stats[4]} ({stats[5]} letters)\n"
+    profile_text += f"└ 📈 Avg Length: {stats[8]:.1f}\n\n"
     
-    # Ornate achievements section
-    profile_text += f"╔━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╗\n"
-    profile_text += f"║ ★  <b>🏆 TROPHY COLLECTION 🏆</b>  ★ ║\n"
-    profile_text += f"╠━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╣\n"
+    # Achievements section
+    profile_text += f"<b>🏆 ACHIEVEMENTS</b>\n"
     
     unlocked = db.get_unlocked_titles(target_user_id)
     if target_user_id == BOT_OWNER_ID:
         unlocked.add('kami')
     
     if unlocked:
-        for t in unlocked:
-            if t in TITLES:
-                profile_text += f"║  ⭐ {TITLES[t]['display']}\n"
+        achievement_list = [TITLES[t]['display'] for t in unlocked if t in TITLES]
+        for i, achievement in enumerate(achievement_list):
+            if i == len(achievement_list) - 1:
+                profile_text += f"└ {achievement}\n"
+            else:
+                profile_text += f"├ {achievement}\n"
     else:
-        profile_text += "║  🔒 No achievements unlocked yet...\n"
+        profile_text += "└ 🔒 None yet\n"
     
-    profile_text += f"╚━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╝\n"
-    profile_text += f"\n  ✧ ✧ ✧  <b>END OF PROFILE</b>  ✧ ✧ ✧"
+    profile_text += f"\n└─ <b>PLAYER CARD</b> {border_char} ─┘"
     
     try:
         profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
