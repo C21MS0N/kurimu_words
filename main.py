@@ -192,11 +192,14 @@ class DatabaseManager:
         return all(checks.values())
     
     def auto_unlock_titles(self, user_id):
-        """Auto-unlock all titles the user qualifies for based on current stats"""
+        """Auto-unlock all titles the user qualifies for based on current stats. Returns newly unlocked titles."""
         unlocked = self.get_unlocked_titles(user_id)
+        newly_unlocked = []
         for title_key in TITLE_REQUIREMENTS.keys():
             if title_key not in unlocked and self.check_title_unlock(user_id, title_key):
                 self.unlock_title(user_id, title_key)
+                newly_unlocked.append(title_key)
+        return newly_unlocked
 
     def update_word_stats(self, user_id, username, word, streak=0, forfeit=False):
         conn = sqlite3.connect(self.db_name)
@@ -994,7 +997,15 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db.auto_unlock_titles(user.id)
+    newly_unlocked = db.auto_unlock_titles(user.id)
+    
+    if newly_unlocked:
+        unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
+        for title_key in newly_unlocked:
+            if title_key in TITLES:
+                unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
+        await update.message.reply_text(unlock_msg, parse_mode='HTML')
+    
     unlocked = db.get_unlocked_titles(user.id)
     active = db.get_active_title(user.id)
     stats = db.get_player_stats(user.id)
@@ -1023,7 +1034,15 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db.auto_unlock_titles(user.id)
+    newly_unlocked = db.auto_unlock_titles(user.id)
+    
+    if newly_unlocked:
+        unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
+        for title_key in newly_unlocked:
+            if title_key in TITLES:
+                unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
+        await update.message.reply_text(unlock_msg, parse_mode='HTML')
+    
     stats = db.get_player_stats(user.id)
     
     if not stats:
