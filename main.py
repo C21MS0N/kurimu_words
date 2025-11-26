@@ -612,12 +612,14 @@ async def lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.group_owner = update.effective_user.id
 
     user = update.effective_user
-    display_name = user.first_name if user.first_name else (user.username if user.username else "Player")
-    game.players.append({'id': user.id, 'name': display_name, 'username': display_name})
+    display_name = str(user.first_name or user.username or "Player").strip()
+    if not display_name or display_name == "None":
+        display_name = "Player"
+    game.players.append({'id': user.id, 'name': display_name, 'username': user.username or display_name})
 
     await update.message.reply_text(
         f"📢 <b>Lobby Opened!</b>\n\n"
-        f"@{display_name} has joined.\n"
+        f"{display_name} has joined.\n"
         f"Waiting for others... Type /join to play!",
         parse_mode='HTML'
     )
@@ -636,10 +638,12 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"👤 You are already in.")
         return
 
-    display_name = user.first_name if user.first_name else (user.username if user.username else "Player")
-    game.players.append({'id': user.id, 'name': display_name, 'username': display_name})
+    display_name = str(user.first_name or user.username or "Player").strip()
+    if not display_name or display_name == "None":
+        display_name = "Player"
+    game.players.append({'id': user.id, 'name': display_name, 'username': user.username or display_name})
     game.initialize_player_stats(user.id)
-    await update.message.reply_text(f"✅ @{display_name} joined! (Total: {len(game.players)})", parse_mode='HTML')
+    await update.message.reply_text(f"✅ {display_name} joined! (Total: {len(game.players)})", parse_mode='HTML')
 
 async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -669,11 +673,12 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.current_turn_user_id = current_player['id']
 
     difficulty_emoji = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
+    player_names = ', '.join([str(p['name']) for p in game.players if p.get('name')])
     await update.message.reply_text(
         f"🎮 *Game Started\\!*\n"
         f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} *{game.difficulty.upper()}*\n"
-        f"Players: {', '.join([p['username'] for p in game.players])}\n\n"
-        f"👉 @{current_player['username']}'s turn\\!\n"
+        f"Players: {player_names}\n\n"
+        f"👉 {str(current_player['name'])}'s turn\\!\n"
         f"Write a *{game.current_word_length}\\-letter* word starting with *'{game.current_start_letter.upper()}'*\n"
         f"⏱️ *Time: {turn_time}s*",
         parse_mode='MarkdownV2'
@@ -1145,8 +1150,10 @@ async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.set_difficulty(difficulty)
     game.is_running = True
     game.is_practice = True
-    display_name = user.first_name if user.first_name else (user.username if user.username else "Player")
-    game.players = [{'id': user_id, 'name': display_name, 'username': display_name}]
+    display_name = str(user.first_name or user.username or "Player").strip()
+    if not display_name or display_name == "None":
+        display_name = "Player"
+    game.players = [{'id': user_id, 'name': display_name, 'username': user.username or display_name}]
     game.initialize_player_stats(user_id)
     games[chat_id] = game
     
