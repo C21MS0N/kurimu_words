@@ -692,9 +692,30 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stop_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    if chat_id in games:
-        games[chat_id].reset()
-        await update.message.reply_text("🛑 Game stopped.")
+    user = update.effective_user
+    
+    if chat_id not in games:
+        await update.message.reply_text("❌ No active game to stop.")
+        return
+    
+    game = games[chat_id]
+    
+    # Check if user is the lobby creator or an admin
+    is_lobby_creator = user.id == game.group_owner
+    is_admin = False
+    
+    try:
+        member = await context.bot.get_chat_member(chat_id, user.id)
+        is_admin = member.status in ['administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Error checking admin status: {e}")
+    
+    if not is_lobby_creator and not is_admin:
+        await update.message.reply_text("❌ Only the lobby creator or admins can stop the game!")
+        return
+    
+    game.reset()
+    await update.message.reply_text("🛑 Game stopped by admin or lobby creator.")
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category_map = {
