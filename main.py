@@ -940,8 +940,14 @@ def run_flask_server():
         logger.error(f"Flask error: {e}")
 
 def run_telegram_bot():
-    """Run Telegram bot with infinite retry"""
+    """Run Telegram bot with infinite retry and dedicated event loop"""
+    import signal as sig_module
     retry_count = 0
+    
+    # Create a new event loop for this thread (avoids signal handler conflicts)
+    new_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(new_loop)
+    
     while True:
         try:
             print(f"🎮 Starting Telegram bot (attempt {retry_count + 1})...", flush=True)
@@ -970,7 +976,8 @@ def run_telegram_bot():
             logger.info("Loaded dictionary words")
             print("🎮 BOT ONLINE - RUNNING FOREVER UNTIL MANUAL STOP!", flush=True)
             retry_count = 0
-            application.run_polling()
+            # Run polling with the dedicated event loop
+            new_loop.run_until_complete(application.run_polling())
         except KeyboardInterrupt:
             print("\n🛑 Bot stopped by user", flush=True)
             break
@@ -979,6 +986,8 @@ def run_telegram_bot():
             logger.error(f"Bot crash #{retry_count}: {str(e)}", exc_info=True)
             print(f"💥 Bot crashed: {e} | AUTO-RESTARTING IN 3s...", flush=True)
             time.sleep(3)
+    
+    new_loop.close()
 
 # ==========================================
 # MAIN EXECUTION - FLASK AS PRIMARY WITH BOT BACKGROUND THREAD
