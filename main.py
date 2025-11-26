@@ -1117,24 +1117,27 @@ async def mytitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
-    target_user = user
+    target_user_id = user.id
+    target_username = user.first_name if user.first_name else "Player"
+    
     if context.args and len(context.args) > 0:
         search_query = context.args[0].lstrip('@').lower()
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
-        c.execute("SELECT user_id, username FROM leaderboard WHERE username LIKE ? LIMIT 1", (f"%{search_query}%",))
+        c.execute("SELECT user_id, username FROM leaderboard WHERE LOWER(username) = ? OR LOWER(username) LIKE ?", (search_query, f"%{search_query}%"))
         result = c.fetchone()
         conn.close()
         
-        if not result:
-            await update.message.reply_text(f"❌ User not found!")
+        if result:
+            target_user_id = result[0]
+            target_username = result[1]
+        else:
+            await update.message.reply_text(f"❌ User '{context.args[0]}' not found in leaderboard! They might not have played yet.")
             return
-        
-        target_user_id = result[0]
-        target_username = result[1]
-    else:
-        target_user_id = user.id
-        target_username = user.first_name if user.first_name else "Player"
+    elif update.message.reply_to_message and update.message.reply_to_message.from_user:
+        replied_user = update.message.reply_to_message.from_user
+        target_user_id = replied_user.id
+        target_username = replied_user.first_name if replied_user.first_name else "Player"
     
     stats = db.get_player_stats(target_user_id)
     if not stats:
@@ -1189,47 +1192,21 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n"
     
     try:
-        try:
-            full_user = await context.bot.get_chat(target_user_id)
-            video_sent = False
+        profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
+        if profile_photos.photos:
+            photo_list = profile_photos.photos[0]
+            largest_photo = photo_list[-1]
             
-            if full_user.personal_chat_id:
-                try:
-                    full_user_info = await context.bot.request.post(
-                        "getFullUserInfo",
-                        data={"user_id": target_user_id}
-                    )
-                    if full_user_info.get('profile_photo') and full_user_info['profile_photo'].get('video'):
-                        video_file_id = full_user_info['profile_photo']['video']['file_id']
-                        await context.bot.send_video(
-                            chat_id=update.effective_chat.id,
-                            video=video_file_id,
-                            caption=profile_text,
-                            parse_mode='HTML'
-                        )
-                        video_sent = True
-                except Exception as e:
-                    logger.info(f"getFullUserInfo failed: {e}")
-            
-            if not video_sent:
-                profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
-                if profile_photos.photos:
-                    photo_list = profile_photos.photos[0]
-                    largest_photo = photo_list[-1]
-                    
-                    await context.bot.send_photo(
-                        chat_id=update.effective_chat.id,
-                        photo=largest_photo.file_id,
-                        caption=profile_text,
-                        parse_mode='HTML'
-                    )
-                else:
-                    await update.message.reply_text(profile_text, parse_mode='HTML')
-        except Exception as e:
-            logger.error(f"Error fetching profile media: {e}")
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=largest_photo.file_id,
+                caption=profile_text,
+                parse_mode='HTML'
+            )
+        else:
             await update.message.reply_text(profile_text, parse_mode='HTML')
     except Exception as e:
-        logger.error(f"Error in profile command: {e}")
+        logger.error(f"Error fetching profile photo: {e}")
         await update.message.reply_text(profile_text, parse_mode='HTML')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
