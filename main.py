@@ -1539,16 +1539,6 @@ if __name__ == '__main__':
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
                 logger.info("Loaded dictionary words")
-                
-                # CRITICAL: Clear stale updates before starting polling
-                # This prevents the bot from processing old messages sent while it was offline
-                try:
-                    stale_updates = application.bot.get_updates(offset=-1)
-                    if stale_updates:
-                        logger.info(f"Cleared {len(stale_updates)} stale updates from offline period")
-                except Exception as e:
-                    logger.warning(f"Could not clear stale updates: {e}")
-                
                 print("🎮 BOT ONLINE - RUNNING FOREVER UNTIL MANUAL STOP!", flush=True)
                 retry_count = 0
                 application.run_polling()
