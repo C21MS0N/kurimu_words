@@ -1187,7 +1187,27 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     profile_text += f"{left_border}" + "─" * 20 + f"{right_border}\n"
     
-    await update.message.reply_text(profile_text, parse_mode='HTML')
+    try:
+        profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
+        
+        if profile_photos.photos:
+            photo_list = profile_photos.photos[0]
+            largest_photo = photo_list[-1]
+            
+            file = await context.bot.get_file(largest_photo.file_id)
+            await file.download_to_memory()
+            
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=file.file_id,
+                caption=profile_text,
+                parse_mode='HTML'
+            )
+        else:
+            await update.message.reply_text(profile_text, parse_mode='HTML')
+    except Exception as e:
+        logger.error(f"Error fetching profile photo: {e}")
+        await update.message.reply_text(profile_text, parse_mode='HTML')
 
 async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
