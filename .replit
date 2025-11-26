@@ -11,8 +11,8 @@ language = "python3"
 requiredFiles = [".replit", "replit.nix"]
 
 [deployment]
-run = ["python3", "main.py"]
-deploymentTarget = "cloudrun"
+run = ["python", "main.py"]
+deploymentTarget = "autoscale"
 
 [agent]
 expertMode = true
@@ -44,7 +44,3 @@ waitForPort = 5000
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 35297
-externalPort = 3000
