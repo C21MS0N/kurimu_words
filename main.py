@@ -190,6 +190,13 @@ class DatabaseManager:
             'longest_word_length': stats[5] >= reqs.get('longest_word_length', float('inf'))
         }
         return all(checks.values())
+    
+    def auto_unlock_titles(self, user_id):
+        """Auto-unlock all titles the user qualifies for based on current stats"""
+        unlocked = self.get_unlocked_titles(user_id)
+        for title_key in TITLE_REQUIREMENTS.keys():
+            if title_key not in unlocked and self.check_title_unlock(user_id, title_key):
+                self.unlock_title(user_id, title_key)
 
     def update_word_stats(self, user_id, username, word, streak=0, forfeit=False):
         conn = sqlite3.connect(self.db_name)
@@ -987,6 +994,7 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    db.auto_unlock_titles(user.id)
     unlocked = db.get_unlocked_titles(user.id)
     active = db.get_active_title(user.id)
     stats = db.get_player_stats(user.id)
@@ -1015,6 +1023,7 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    db.auto_unlock_titles(user.id)
     stats = db.get_player_stats(user.id)
     
     if not stats:
