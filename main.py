@@ -369,6 +369,7 @@ class GameState:
         self.group_owner: Optional[int] = None
         self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
+        self.is_practice: bool = False
 
         self.load_dictionary()
 
@@ -489,13 +490,22 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
     
     game.eliminated_players.add(user_id)
     game.reset_streak(user_id)
-    db.update_word_stats(user_id, current_player['name'], "", 0, forfeit=True)
     
-    await application.bot.send_message(
-        chat_id=chat_id,
-        text=f"⏰ *Time's Up\\!* @{current_player['username']} is eliminated\\! \\(-10 pts\\)\n\nPoints before elimination count\\.",
-        parse_mode='MarkdownV2'
-    )
+    if not game.is_practice:
+        db.update_word_stats(user_id, current_player['name'], "", 0, forfeit=True)
+    
+    if game.is_practice:
+        await application.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏰ <b>TIME'S UP!</b>\n\n❌ You were eliminated due to timeout!\n\n(Practice mode - no points deducted)",
+            parse_mode='HTML'
+        )
+    else:
+        await application.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏰ <b>TIME'S UP!</b>\n\n❌ @{current_player['username']} is eliminated!\n\n(-10 pts)\n\n<i>Points earned before elimination still count.</i>",
+            parse_mode='HTML'
+        )
     
     game.next_turn()
     
@@ -1134,6 +1144,7 @@ async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = GameState(chat_id=chat_id, application=context.application)
     game.set_difficulty(difficulty)
     game.is_running = True
+    game.is_practice = True
     game.players = [{'id': user_id, 'name': user.first_name, 'username': user.username or user.first_name}]
     game.initialize_player_stats(user_id)
     games[chat_id] = game
@@ -1505,28 +1516,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game.increment_streak(user.id)
         current_streak = game.get_streak(user.id)
 
-        db.update_word_stats(user.id, user.first_name, word, current_streak)
+        if not game.is_practice:
+            db.update_word_stats(user.id, user.first_name, word, current_streak)
 
         streak_bonus = ""
         if current_streak >= 3:
-            streak_bonus = f"\n🔥 *{current_streak} STREAK\\!* You're on fire\\!"
+            streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
 
         difficulty_increased = game.next_turn()
         
-        msg_text = f"✅ '{word}' \\(\\+{len(word)} pts\\){streak_bonus}\n\n"
+        msg_text = f"✅ '{word}' <b>(+{len(word)})</b>{streak_bonus}\n\n"
         
         if difficulty_increased:
-            msg_text += f"📈 *DIFFICULTY INCREASED\\!* Now *{game.current_word_length} letters\\!*\n\n"
+            msg_text += f"📈 <b>DIFFICULTY INCREASED!</b> Now <b>{game.current_word_length}-letter</b> words!\n\n"
         
         next_player = game.players[game.current_player_index]
         turn_time = game.get_turn_time()
         game.current_turn_user_id = next_player['id']
         
-        msg_text += f"👉 @{next_player['username']}'s Turn\n"
-        msg_text += f"Target: *{game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
-        msg_text += f"⏱️ *Time: {turn_time}s*"
+        if game.is_practice:
+            msg_text += f"💪 <b>Next Challenge:</b>\n"
+            msg_text += f"Target: <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+            msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
+        else:
+            msg_text += f"👉 @{next_player['username']}'s Turn\n"
+            msg_text += f"Target: <b>{game.current_word_length}-letter</b> word starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+            msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
 
-        await update.message.reply_text(msg_text, parse_mode='MarkdownV2')
+        await update.message.reply_text(msg_text, parse_mode='HTML')
         game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
     except Exception as e:
         logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
