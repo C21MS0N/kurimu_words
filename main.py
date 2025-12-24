@@ -400,6 +400,7 @@ class GameState:
         self.is_practice: bool = False
         self.is_cpu_game: bool = False
         self.cpu_difficulty: str = 'medium'
+        self.game_mode: str = 'nerd'  # 'chaos' or 'nerd'
         self.last_activity_time: float = time.time()  # Track for memory cleanup
         self.challenge_index: int = 0  # Track position in challenge sequence
 
@@ -461,11 +462,17 @@ class GameState:
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
         self.turn_count += 1
 
-        # Use challenge sequence cycling
-        challenge_length, challenge_letter = CHALLENGE_SEQUENCE[self.challenge_index % len(CHALLENGE_SEQUENCE)]
-        self.current_word_length = challenge_length
-        self.current_start_letter = challenge_letter
-        self.challenge_index += 1
+        if self.game_mode == 'chaos':
+            # Chaos: random letter + random length (3-12)
+            self.current_word_length = random.randint(3, 12)
+            self.current_start_letter = random.choice(string.ascii_lowercase)
+        else:
+            # Nerd: random letter + progressive length
+            # Starts at 3, increases every 6 turns
+            num_players = len(self.players) if self.players else 1
+            rounds_completed = self.turn_count // num_players
+            self.current_word_length = min(3 + rounds_completed, 15)
+            self.current_start_letter = random.choice(string.ascii_lowercase)
 
         difficulty_increased = self.turn_count % 6 == 0  # Mark difficulty increase every 6 turns
         if difficulty_increased:
@@ -875,6 +882,48 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text += "\n💡 Use: /leaderboard [score/words/streak/longest]"
     await update.message.reply_text(text, parse_mode='HTML')
+
+async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Switch between Chaos and Nerd game modes"""
+    if is_message_stale(update):
+        return
+    
+    chat_id = update.effective_chat.id
+    if chat_id not in games:
+        games[chat_id] = GameState(chat_id=chat_id, application=context.application)
+    
+    game = games[chat_id]
+    
+    if game.is_running:
+        await update.message.reply_text("❌ Cannot change mode during an active game!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            f"🎮 <b>Current Mode: {game.game_mode.upper()}</b>\n\n"
+            "🎲 <b>CHAOS</b>\n"
+            "• Random letters each turn\n"
+            "• Random word lengths (3-12 letters)\n"
+            "• Unpredictable & chaotic\n\n"
+            "🤓 <b>NERD</b>\n"
+            "• Random letters each turn\n"
+            "• Word length increases +1 every round\n"
+            "• Starts at 3 letters\n\n"
+            "Use: /mode [chaos/nerd]",
+            parse_mode='HTML'
+        )
+        return
+    
+    new_mode = context.args[0].lower()
+    if new_mode in ['chaos', 'nerd']:
+        game.game_mode = new_mode
+        mode_emoji = {'chaos': '🎲', 'nerd': '🤓'}
+        await update.message.reply_text(
+            f"✅ Mode set to {mode_emoji[new_mode]} <b>{new_mode.upper()}</b>!",
+            parse_mode='HTML'
+        )
+    else:
+        await update.message.reply_text("❌ Invalid mode! Use: chaos or nerd")
 
 async def difficulty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -1876,6 +1925,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("lobby", lobby))
                 application.add_handler(CommandHandler("join", join))
                 application.add_handler(CommandHandler("begin", begin_game))
+                application.add_handler(CommandHandler("mode", mode_command))
                 application.add_handler(CommandHandler("difficulty", difficulty))
                 application.add_handler(CommandHandler("stop", stop_game))
                 application.add_handler(CommandHandler("forfeit", forfeit_command))
