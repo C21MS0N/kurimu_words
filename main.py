@@ -358,6 +358,8 @@ class GameState:
         self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         self.is_practice: bool = False
+        self.is_cpu_game: bool = False
+        self.cpu_difficulty: str = 'medium'  # easy, medium, hard
         self.last_activity_time: float = time.time()
 
         self.load_dictionary()
@@ -502,6 +504,28 @@ class GameState:
     def initialize_player_stats(self, user_id: int):
         if user_id not in self.player_streaks:
             self.player_streaks[user_id] = 0
+    
+    def get_cpu_word(self) -> str:
+        """AI selects a valid word for CPU turn based on difficulty"""
+        key = f"{self.current_word_length}-{self.current_start_letter}"
+        available = self.dictionary_map.get(key, set()) - self.used_words
+        
+        if not available:
+            return None
+        
+        available_list = list(available)
+        
+        # Difficulty affects word selection
+        if self.cpu_difficulty == 'easy':
+            # CPU picks random word (makes mistakes)
+            if random.random() < 0.3:  # 30% chance of picking ANY word
+                return random.choice(available_list)
+        elif self.cpu_difficulty == 'hard':
+            # CPU picks longest available word
+            return max(available_list, key=len) if available_list else None
+        
+        # Medium: random selection from available (default smart behavior)
+        return random.choice(available_list) if available_list else None
 
 # Key: chat_id, Value: GameState
 games: Dict[int, GameState] = {}
@@ -978,30 +1002,213 @@ async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Practice started! {game.current_word_length} letters, start {game.current_start_letter}")
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, update.effective_user.id, context.application))
 
+async def vscpu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start a 1v1 game against CPU opponent"""
+    if is_message_stale(update): return
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    if chat_id in games and games[chat_id].is_running:
+        await update.message.reply_text("❌ A game is already running! Use /stop first.")
+        return
+    
+    # Get difficulty level
+    difficulty = 'medium'
+    if context.args:
+        difficulty = context.args[0].lower()
+        if difficulty not in ['easy', 'medium', 'hard']:
+            difficulty = 'medium'
+    
+    # Create game
+    game = GameState(chat_id=chat_id, application=context.application)
+    game.is_cpu_game = True
+    game.cpu_difficulty = difficulty
+    game.is_running = True
+    game.game_mode = 'nerd'
+    game.group_owner = user.id
+    
+    # Add human player
+    display_name = str(user.first_name or user.username or "Player").strip()
+    if display_name == "None" or not display_name: display_name = "Player"
+    username_to_store = (user.username if user.username else display_name).lstrip('@')
+    
+    game.players.append({'id': user.id, 'name': display_name, 'username': username_to_store, 'is_cpu': False})
+    game.players.append({'id': 999999, 'name': '🤖 CPU', 'username': 'cpu', 'is_cpu': True})
+    
+    game.initialize_player_stats(user.id)
+    game.initialize_player_stats(999999)
+    db.ensure_player_exists(user.id, username_to_store)
+    games[chat_id] = game
+    
+    # Start game
+    game.current_word_length, game.current_start_letter = game.generate_valid_challenge(game.game_mode)
+    turn_time = game.get_turn_time()
+    game.current_turn_user_id = user.id
+    
+    await update.message.reply_text(
+        f"🎮 *1v1 vs CPU* 🤖\n"
+        f"Difficulty: *{difficulty.upper()}*\n"
+        f"Mode: *NERD*\n\n"
+        f"👉 {display_name}'s Turn\\!\n"
+        f"Target: *exactly {game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
+        f"⏱️ *Time: {turn_time}s*",
+        parse_mode='MarkdownV2'
+    )
+    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, user.id, context.application))
+
+async def cpu_turn(chat_id: int, application):
+    """Handle CPU player's turn"""
+    if chat_id not in games: return
+    game = games[chat_id]
+    
+    await asyncio.sleep(1)  # Simulate thinking
+    
+    cpu_word = game.get_cpu_word()
+    
+    if not cpu_word:
+        await application.bot.send_message(chat_id, "🤖 CPU forfeit! (No valid words)")
+        game.eliminated_players.add(999999)
+    else:
+        game.used_words.add(cpu_word)
+        game.increment_streak(999999)
+        
+        msg = f"🤖 CPU played: *{cpu_word}* \\(\\+{len(cpu_word)} pts\\)\n\n"
+        await application.bot.send_message(chat_id, msg, parse_mode='MarkdownV2')
+    
+    game.next_turn()
+    
+    # Check win
+    if len(game.eliminated_players) >= 1:
+        winner = game.players[0] if game.players[0]['id'] not in game.eliminated_players else None
+        if winner:
+            await application.bot.send_message(chat_id, f"🏆 *{winner['name']} WINS\\!*", parse_mode='MarkdownV2')
+            db.increment_games_played(winner['id'])
+        game.reset()
+        return
+    
+    # Next turn (should be human)
+    next_player = game.players[game.current_player_index]
+    turn_time = game.get_turn_time()
+    game.current_turn_user_id = next_player['id']
+    
+    await application.bot.send_message(
+        chat_id,
+        f"👉 @{next_player['username']}'s Turn\n"
+        f"Target: *exactly {game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n"
+        f"⏱️ *Time: {turn_time}s*",
+        parse_mode='MarkdownV2'
+    )
+    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], application))
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """🎮 <b>GAMEPLAY GUIDE</b>
+    help_text = """🎮 <b>INFINITE WORD GAME - COMPLETE GUIDE</b>
 
-<b>🎯 HOW TO PLAY</b>
-Submit valid English words matching the Letter and Length.
-/lobby → Open lobby
-/join → Join game
-/mode [chaos/nerd] → Select mode
-/begin → Start
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>🎯 CORE GAMEPLAY</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Submit valid English dictionary words matching the challenge:
+• Current word length (e.g., "exactly 5 letters")
+• Starting letter (e.g., "starts with N")
+• Valid, unused words only
+• Each word = points equal to its length
 
-<b>🔥 GAME MODES</b>
-🎲 <b>CHAOS:</b> Random letters & random lengths (3-12). Time reduces every round.
-🤓 <b>NERD:</b> Starts at 3 letters. Length increases +1 every round. Time reduces every round.
+<b>⏱️ TIME SYSTEM</b>
+• Start: 30 seconds per turn
+• Decreases: 5 seconds every round completion
+• Minimum: 5 seconds (game stays fast)
+• Timeout = eliminated (no points lost, just forfeit)
 
-<b>🕵️ SECRET & ADMIN COMMANDS</b>
-/omnipotent [points] → (Admin Only) Reply to a user to gift them shop points.
-/authority hint=2 → (Admin Only) Limit boosters per game.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>🎮 GAME MODES</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>🎲 CHAOS MODE</b>
+• Random starting letters each turn
+• Random word lengths (3-12 letters)
+• Unpredictable & chaotic gameplay
+• Difficulty: Time reduction only
+✅ Use: /mode chaos
 
-<b>💰 SHOP</b>
-/shop → Buy hints/skips
-/buy_hint, /buy_skip, /buy_rebound
+<b>🤓 NERD MODE</b>
+• Random starting letters each turn
+• Word length increases +1 each round
+• Starts at 3 letters → progresses to 15
+• Difficulty: Both length increase + time reduction
+✅ Use: /mode nerd (default)
 
-<b>📊 STATS</b>
-/mystats, /leaderboard, /achievements, /profile"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>📋 GAME MODES & COMMANDS</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>MULTIPLAYER (2+ Players):</b>
+/lobby - Create new game lobby
+/join - Join existing lobby
+/mode [chaos/nerd] - Select game mode
+/begin - Start game (2+ required)
+/forfeit - Give up current turn
+/stop - End current game (owner/admin)
+
+<b>VS CPU (Single Player):</b>
+/vscpu [easy/medium/hard] - 1v1 vs computer
+  • easy: CPU makes random mistakes
+  • medium: CPU plays strategically (default)
+  • hard: CPU picks longest words
+✅ Example: /vscpu hard
+
+<b>SOLO PRACTICE:</b>
+/practice - Solo challenge (no scoring)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>💰 SHOP & BOOSTS</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/shop - View available boosters
+/buy_hint (80 pts) - Get 3 word suggestions
+/buy_skip (150 pts) - Skip your turn
+/buy_rebound (250 pts) - Skip & pass to next
+/inventory - Check your items & points
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>📊 STATS & RANKINGS</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/mystats - Your personal statistics
+/leaderboard [score/words/streak/longest]
+  • score: Total points earned
+  • words: Total words submitted
+  • streak: Longest word streak
+  • longest: Longest single word
+
+/profile [@username] - View player profile
+/achievements - See unlocked titles
+/settitle [title] - Equip a title
+/mytitle - View current equipped title
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>🏆 ACHIEVEMENT TITLES</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ <b>KAMI</b> - Exclusive bot owner title
+👑 <b>LEGEND</b> - 1000+ total points
+⚔️ <b>WARRIOR</b> - 10+ word streak
+🧙 <b>SAGE</b> - 50+ words submitted
+🔥 <b>PHOENIX</b> - 10+ games completed
+🌑 <b>SHADOW</b> - 12+ letter word found
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>🔐 ADMIN COMMANDS</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/omnipotent [points] - Gift points to user
+  (Reply to their message to gift)
+  
+/authority hint=X skip=Y rebound=Z - Limit boosters
+  (Lobby owner only, set max uses per game)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>📝 TIPS & STRATEGY</b>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Build streaks for bonus points
+💡 Time decreases → play faster words
+💡 Nerd mode: Plan ahead for longer words
+💡 CPU hard mode challenges your vocabulary
+💡 Practice solo to sharpen skills
+
+<b>🎯 /start → Get quick overview</b>"""
     await update.message.reply_text(help_text, parse_mode='HTML')
 
 # ==========================================
@@ -1017,7 +1224,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     current_player = game.players[game.current_player_index]
 
-    if user.id != current_player['id']: return 
+    if user.id != current_player['id']: return
+    
+    # CPU turn handler
+    if game.is_cpu_game and current_player['id'] == 999999:
+        await cpu_turn(chat_id, context.application)
+        return 
 
     word = update.message.text.strip().lower()
 
@@ -1048,12 +1260,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.current_turn_user_id = next_player['id']
 
     msg_text = f"✅ '{word}' accepted! (+{len(word)} pts)\n\n"
-    msg_text += f"👉 @{next_player['username']}'s Turn\n"
-    msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-    msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
-
-    await update.message.reply_text(msg_text, parse_mode='HTML')
-    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
+    
+    # CPU turn handler
+    if game.is_cpu_game and next_player['id'] == 999999:
+        msg_text += f"🤖 CPU is thinking...\n⏱️ <b>Time: {turn_time}s</b>"
+        await update.message.reply_text(msg_text, parse_mode='HTML')
+        await asyncio.sleep(2)  # Wait before CPU turn
+        await cpu_turn(chat_id, context.application)
+    else:
+        msg_text += f"👉 @{next_player['username']}'s Turn\n"
+        msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
+        await update.message.reply_text(msg_text, parse_mode='HTML')
+        game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
 # ==========================================
 # MAIN EXECUTION
@@ -1087,6 +1306,7 @@ if __name__ == '__main__':
             application.add_handler(CommandHandler("profile", profile_command))
             application.add_handler(CommandHandler("authority", authority_command))
             application.add_handler(CommandHandler("practice", practice_command))
+            application.add_handler(CommandHandler("vscpu", vscpu_command))
 
             application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
