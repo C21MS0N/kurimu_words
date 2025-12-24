@@ -398,8 +398,6 @@ class GameState:
         self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         self.is_practice: bool = False
-        self.is_cpu_game: bool = False
-        self.cpu_difficulty: str = 'medium'
         self.last_activity_time: float = time.time()  # Track for memory cleanup
         self.challenge_index: int = 0  # Track position in challenge sequence
 
@@ -499,23 +497,6 @@ class GameState:
     def initialize_player_stats(self, user_id: int):
         if user_id not in self.player_streaks:
             self.player_streaks[user_id] = 0
-    
-    def get_cpu_word(self) -> Optional[str]:
-        """AI selects a word for CPU turn based on difficulty"""
-        valid_words = [w for w in self.dictionary if len(w) == self.current_word_length and w.startswith(self.current_start_letter) and w not in self.used_words]
-        if not valid_words:
-            return None
-        
-        if self.cpu_difficulty == 'easy':
-            # Easy: random word (occasional mistakes)
-            if random.random() < 0.25:
-                return random.choice(valid_words)
-        elif self.cpu_difficulty == 'hard':
-            # Hard: always pick longest word
-            return max(valid_words, key=len)
-        
-        # Medium: smart random selection
-        return random.choice(valid_words)
 
 # Key: chat_id, Value: GameState
 games: Dict[int, GameState] = {}
@@ -1314,95 +1295,6 @@ async def mytitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_data = TITLES[active]
     await update.message.reply_text(f"👤 Your Title: {title_data['display']}", parse_mode='HTML')
 
-async def vscpu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start 1v1 game vs CPU opponent"""
-    if is_message_stale(update): return
-    chat_id = update.effective_chat.id
-    user = update.effective_user
-    
-    if chat_id in games and games[chat_id].is_running:
-        await update.message.reply_text("❌ A game is already running! Use /stop first.")
-        return
-    
-    difficulty = 'medium'
-    if context.args:
-        difficulty = context.args[0].lower()
-        if difficulty not in ['easy', 'medium', 'hard']:
-            difficulty = 'medium'
-    
-    game = GameState(chat_id=chat_id, application=context.application)
-    game.is_cpu_game = True
-    game.cpu_difficulty = difficulty
-    game.is_running = True
-    game.group_owner = user.id
-    
-    display_name = str(user.first_name or user.username or "Player").strip()
-    if not display_name or display_name == "None":
-        display_name = "Player"
-    username_to_store = (user.username if user.username else display_name).lstrip('@')
-    
-    game.players.append({'id': user.id, 'name': display_name, 'username': username_to_store})
-    game.players.append({'id': 999999, 'name': '🤖 CPU', 'username': 'cpu'})
-    game.initialize_player_stats(user.id)
-    game.initialize_player_stats(999999)
-    db.ensure_player_exists(user.id, username_to_store)
-    games[chat_id] = game
-    
-    game.next_turn()
-    turn_time = game.get_turn_time()
-    game.current_turn_user_id = user.id
-    
-    difficulty_emoji = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
-    await update.message.reply_text(
-        f"🎮 <b>1v1 vs CPU 🤖</b>\n"
-        f"Difficulty: {difficulty_emoji.get(difficulty, '🟡')} <b>{difficulty.upper()}</b>\n\n"
-        f"👉 {display_name}'s Turn\n"
-        f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-        f"⏱️ <b>Time: {turn_time}s</b>",
-        parse_mode='HTML'
-    )
-    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, user.id, context.application))
-
-async def cpu_turn(chat_id: int, application):
-    """Handle CPU player turn"""
-    if chat_id not in games:
-        return
-    game = games[chat_id]
-    
-    await asyncio.sleep(1)
-    cpu_word = game.get_cpu_word()
-    
-    if not cpu_word:
-        await application.bot.send_message(chat_id, "🤖 CPU forfeit! (No valid words)")
-        game.eliminated_players.add(999999)
-    else:
-        game.used_words.add(cpu_word)
-        game.increment_streak(999999)
-        await application.bot.send_message(chat_id, f"🤖 CPU played: <b>{cpu_word}</b> (+{len(cpu_word)})", parse_mode='HTML')
-    
-    game.next_turn()
-    
-    if len(game.eliminated_players) >= 1:
-        winner = game.players[0] if game.players[0]['id'] not in game.eliminated_players else None
-        if winner:
-            await application.bot.send_message(chat_id, f"🏆 <b>{winner['name']} WINS!</b>", parse_mode='HTML')
-            db.increment_games_played(winner['id'])
-        game.reset()
-        return
-    
-    next_player = game.players[game.current_player_index]
-    turn_time = game.get_turn_time()
-    game.current_turn_user_id = next_player['id']
-    
-    await application.bot.send_message(
-        chat_id,
-        f"👉 @{next_player['username']}'s Turn\n"
-        f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-        f"⏱️ <b>Time: {turn_time}s</b>",
-        parse_mode='HTML'
-    )
-    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], application))
-
 async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Me vs Me - Solo practice mode"""
     user = update.effective_user
@@ -1785,11 +1677,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_player = game.players[game.current_player_index]
 
     if user.id != current_player['id']: return 
-    
-    # CPU turn handler
-    if game.is_cpu_game and current_player['id'] == 999999:
-        await cpu_turn(chat_id, context.application)
-        return
 
     word = update.message.text.strip().lower()
 
@@ -1843,13 +1730,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
 
         await update.message.reply_text(msg_text, parse_mode='HTML')
-        
-        # CPU turn handler
-        if game.is_cpu_game and next_player['id'] == 999999:
-            await asyncio.sleep(2)
-            await cpu_turn(chat_id, context.application)
-        else:
-            game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
+        game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
     except Exception as e:
         logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
         await update.message.reply_text(f"❌ Error processing your word. Try again.")
@@ -1897,7 +1778,6 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("progress", progress_command))
                 application.add_handler(CommandHandler("profile", profile_command))
                 application.add_handler(CommandHandler("practice", practice_command))
-                application.add_handler(CommandHandler("vscpu", vscpu_command))
                 application.add_handler(CommandHandler("groupdesc", groupdesc_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
