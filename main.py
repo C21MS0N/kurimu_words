@@ -1405,14 +1405,22 @@ async def vscpu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         display_name = "Player"
     username_to_store = (user.username if user.username else display_name).lstrip('@')
     
-    game.players.append({'id': user.id, 'name': display_name, 'username': username_to_store})
-    game.players.append({'id': 999999, 'name': '🤖 CPU', 'username': 'cpu'})
+    game.players = [
+        {'id': user.id, 'name': display_name, 'username': username_to_store},
+        {'id': 999999, 'name': '🤖 CPU', 'username': 'cpu'}
+    ]
     game.initialize_player_stats(user.id)
     game.initialize_player_stats(999999)
     db.ensure_player_exists(user.id, username_to_store)
     games[chat_id] = game
     
-    game.next_turn()
+    # Initialize first challenge
+    game.current_start_letter = random.choice(string.ascii_lowercase)
+    if game.game_mode == 'chaos':
+        game.current_word_length = random.randint(3, 12)
+    else:
+        game.current_word_length = 3
+        
     turn_time = game.get_turn_time()
     game.current_turn_user_id = user.id
     
@@ -1822,11 +1830,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         current_streak = game.get_streak(user.id)
 
         if not game.is_practice:
-            db.update_word_stats(user.id, user.first_name, word, current_streak)
-
-        streak_bonus = ""
-        if current_streak >= 3:
-            streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
+            # For CPU games, ensure we store the correct name
+            player_name = user.first_name or user.username or "Player"
+            db.update_word_stats(user.id, player_name, word, current_streak)
 
         difficulty_increased = game.next_turn()
         
@@ -1843,6 +1849,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg_text += f"💪 <b>Next Challenge:</b>\n"
             msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
             msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
+        elif game.is_cpu_game and next_player['id'] == 999999:
+            msg_text += f"🤖 <b>CPU's Turn...</b>"
         else:
             msg_text += f"👉 @{next_player['username']}'s Turn\n"
             msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
@@ -1852,7 +1860,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # CPU turn handler
         if game.is_cpu_game and next_player['id'] == 999999:
-            await asyncio.sleep(2)
+            # Don't create timeout task for CPU, just run the turn
+            await asyncio.sleep(1)
             await cpu_turn(chat_id, context.application)
         else:
             game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
