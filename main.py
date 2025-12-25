@@ -1793,14 +1793,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_player = game.players[game.current_player_index]
 
     if user.id != current_player['id']: return 
-    
-    # CPU turn handler
-    if game.is_cpu_game and current_player['id'] == 999999:
-        await cpu_turn(chat_id, context.application)
-        return
 
     word = update.message.text.strip().lower()
-
+    
+    # Validation
     if len(word) != game.current_word_length:
         await update.message.reply_text(f"❌ Word must be exactly {game.current_word_length} letters! Try again.")
         return
@@ -1818,7 +1814,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Cancel any pending timeout for the current player
         game.cancel_timeout()
+        
         game.used_words.add(word)
         game.increment_streak(user.id)
         current_streak = game.get_streak(user.id)
@@ -1835,7 +1833,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg_text = f"✅ '{word}' <b>(+{len(word)})</b>{streak_bonus}\n\n"
         
         if difficulty_increased:
-            msg_text += f"⏱️ <b>Time reduced by 5s!</b> Difficulty level {game.difficulty_level}\n\n"
+            msg_text += f"⏱️ <b>Time reduced!</b> Difficulty level {game.difficulty_level}\n\n"
         
         next_player = game.players[game.current_player_index]
         turn_time = game.get_turn_time()
