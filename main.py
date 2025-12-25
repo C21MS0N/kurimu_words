@@ -1673,88 +1673,31 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(profile_text, parse_mode='HTML')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """🎮 <b>COMPLETE GAMEPLAY GUIDE</b>
-
-<b>🎯 GAME OBJECTIVE</b>
-Submit valid English words that match the letter and length criteria each turn. Build streaks, earn points, and climb the leaderboard!
-
-<b>📜 GAME RULES</b>
-1. Words must start with the specified letter
-2. Words must match the required length
-3. Each word can only be used once per game
-4. Invalid words result in an immediate turn skip
-5. Time limit: 60 seconds per turn
-6. Game eliminates players after timeout
-
-<b>🎮 HOW TO PLAY</b>
-/lobby → Open a game lobby
-/join → Join an existing lobby
-/difficulty [easy/medium/hard] → Set difficulty before /begin
-/begin → Start the game (2+ players required)
-• Type valid words during your turn
-/stop → End the current game
-
-<b>⚙️ DIFFICULTY MODES</b>
-🟢 <b>Easy</b>: 3-10 letters, word length increases every 3 rounds
-🟡 <b>Medium</b>: 3-15 letters, word length increases every 2 rounds
-🔴 <b>Hard</b>: 4-20 letters, word length increases every round
-
-<b>📊 SCORING SYSTEM</b>
-• Points = word length (e.g., "hello" = 5 points)
-• Build streaks for consecutive correct words
-• 3+ streak = 🔥 STREAK bonus displayed
-• Longest word ever = highest individual score
-• Average word length tracked
-
-<b>💰 SHOP & BOOSTS</b>
-/shop → View available boosts and prices
-/inventory → Check your current boosts
-
-<b>Hint Boost (80 pts)</b>
-/buy_hint → Purchase (3 suggestions, 2-min cooldown)
-
-<b>Skip Boost (150 pts)</b>
-/buy_skip → Purchase (skip turn penalty-free)
-
-<b>Rebound Boost (250 pts)</b>
-/buy_rebound → Purchase (skip & pass to next player)
-
-/forfeit → Give up turn (-10 total points penalty)
-
-<b>🏆 ACHIEVEMENTS & TITLES</b>
-Unlock titles by meeting specific criteria:
-👑 LEGEND: Reach 1000 total points
-⚔️ WARRIOR: Achieve 10+ word streak
-🧙 SAGE: Submit 50+ words
-🔥 PHOENIX: Complete 10+ games
-🌑 SHADOW: Find a 12+ letter word
-✨ KAMI: Exclusive to bot owner
-
-/achievements → View all titles
-/settitle [title] → Equip a title
-/progress → Check unlock requirements
-
-<b>👤 PROFILES & STATS</b>
-/mystats → View your statistics
-/profile [@username] → View any player's profile with picture
-/leaderboard [score/words/streak/longest] → Top 10 players
-
-<b>📋 ALL COMMANDS</b>
-<b>Setup:</b> /start /help /difficulty
-<b>Game:</b> /lobby /join /begin /stop /forfeit
-<b>Shop:</b> /shop /inventory /buy_hint /buy_skip /buy_rebound /hint /skip_boost /rebound
-<b>Stats:</b> /mystats /profile /leaderboard /achievements /settitle /mytitle /progress
-
-<b>💡 PRO TIPS</b>
-✅ Start easy to learn mechanics
-✅ Build long streaks for combo bonuses
-✅ Longer words = more points
-✅ Plan ahead for harder letters
-✅ Use hints strategically when stuck
-✅ Earn shop currency from word length
-✅ Check /profile to see all player stats
-
-🚀 <b>Ready to play? Type /lobby to get started!</b>"""
+    """Complete gameplay guide and rules"""
+    help_text = (
+        "🎮 <b>INFINITE WORD GAME - MASTER GUIDE</b> 🎮\n\n"
+        "<b>1. BASIC RULES</b>\n"
+        "• Submit words matching the target letter and length.\n"
+        "• Words must exist in the 370K+ word dictionary.\n"
+        "• You cannot reuse words already played in the same game.\n"
+        "• Points = Word Length. Higher length = More points!\n\n"
+        "<b>2. GAME MODES</b>\n"
+        "🤓 <b>NERD (Progressive):</b> Word length increases +1 every round. Starts at 3.\n"
+        "🎲 <b>CHAOS (Random):</b> Every turn has a completely random length (3-12).\n"
+        "🤖 <b>VS CPU:</b> 1v1 battle against the bot with 3 difficulty levels.\n"
+        "💪 <b>PRACTICE:</b> Solo training to build your vocabulary and speed.\n\n"
+        "<b>3. SHOP & BOOSTS</b>\n"
+        "📖 <b>HINT (80 pts):</b> Shows 3 possible words for the current target.\n"
+        "⏭️ <b>SKIP (150 pts):</b> Skip your turn without point penalty.\n"
+        "🔄 <b>REBOUND (250 pts):</b> Skip and pass the same target to the next player!\n\n"
+        "<b>4. TITLES & ACHIEVEMENTS</b>\n"
+        "Unlock badges like 👑 <b>LEGEND</b>, ⚔️ <b>WARRIOR</b>, or 🧙 <b>SAGE</b> by reaching milestones. "
+        "Use /achievements to see them and /settitle to equip one!\n\n"
+        "<b>5. STREAKS</b>\n"
+        "Build a 3+ streak to get 🔥 <b>STREAK</b> bonuses and show off on the leaderboard!\n\n"
+        "<i>Compete, earn points, and climb the global leaderboard!</i>\n\n"
+        "✨ <b>Developed by 『ƈʀɨʍֆօռ♦』</b> ✨"
+    )
     await update.message.reply_text(help_text, parse_mode='HTML')
 
 async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
