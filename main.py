@@ -437,6 +437,7 @@ class GameState:
         self.difficulty = 'medium'
         difficulty_config = DIFFICULTY_MODES[self.difficulty]
         self.current_word_length = difficulty_config['start_length']
+        self.current_start_letter = random.choice(string.ascii_lowercase) # Random start
         self.used_words = set()
         self.turn_count = 0
         self.player_streaks = {}
@@ -465,19 +466,20 @@ class GameState:
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
         self.turn_count += 1
 
+        # Randomize challenges based on mode
+        self.current_start_letter = random.choice(string.ascii_lowercase)
+        
         if self.game_mode == 'chaos':
-            # Chaos: random letter + random length (3-12)
+            # Chaos: random length (3-12)
             self.current_word_length = random.randint(3, 12)
-            self.current_start_letter = random.choice(string.ascii_lowercase)
         else:
-            # Nerd: random letter + progressive length
-            # Starts at 3, increases every 6 turns
+            # Nerd: progressive length
+            # Starts at 3, increases every round (all players have one turn)
             num_players = len(self.players) if self.players else 1
             rounds_completed = self.turn_count // num_players
             self.current_word_length = min(3 + rounds_completed, 15)
-            self.current_start_letter = random.choice(string.ascii_lowercase)
 
-        difficulty_increased = self.turn_count % 6 == 0  # Mark difficulty increase every 6 turns
+        difficulty_increased = self.turn_count % 6 == 0
         if difficulty_increased:
             self.difficulty_level += 1
 
@@ -806,13 +808,18 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     game.is_lobby_open = False
     game.is_running = True
-
-    # Initialize first challenge from sequence
-    challenge_length, challenge_letter = CHALLENGE_SEQUENCE[0]
-    game.current_word_length = challenge_length
-    game.current_start_letter = challenge_letter
-    game.challenge_index = 1
+    game.turn_count = 0
+    game.current_player_index = 0
+    game.eliminated_players = set()
+    game.used_words = set()
     
+    # Randomize first challenge
+    game.current_start_letter = random.choice(string.ascii_lowercase)
+    if game.game_mode == 'chaos':
+        game.current_word_length = random.randint(3, 12)
+    else:
+        game.current_word_length = 3
+
     game.turn_start_time = time.time()
     current_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
@@ -821,13 +828,14 @@ async def begin_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     difficulty_emoji = {'easy': '🟢', 'medium': '🟡', 'hard': '🔴'}
     player_names = ', '.join([str(p['name']) for p in game.players if p.get('name')])
     await update.message.reply_text(
-        f"🎮 *Game Started\\!*\n"
-        f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} *{game.difficulty.upper()}*\n"
+        f"🎮 <b>Game Started!</b>\n"
+        f"Mode: <b>{game.game_mode.upper()}</b>\n"
+        f"Difficulty: {difficulty_emoji.get(game.difficulty, '🟡')} <b>{game.difficulty.upper()}</b>\n"
         f"Players: {player_names}\n\n"
-        f"👉 {str(current_player['name'])}'s turn\\!\n"
-        f"Write a word with exactly *{game.current_word_length}* letters starting with *'{game.current_start_letter.upper()}'*\n"
-        f"⏱️ *Time: {turn_time}s*",
-        parse_mode='MarkdownV2'
+        f"👉 {str(current_player['name'])}'s turn!\n"
+        f"Write a word with exactly <b>{game.current_word_length}</b> letters starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        f"⏱️ <b>Time: {turn_time}s</b>",
+        parse_mode='HTML'
     )
     
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, current_player['id'], context.application))
