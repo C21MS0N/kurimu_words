@@ -1444,15 +1444,16 @@ async def cpu_turn(chat_id: int, application):
         game.increment_streak(999999)
         await application.bot.send_message(chat_id, f"🤖 CPU played: <b>{cpu_word}</b> (+{len(cpu_word)})", parse_mode='HTML')
     
-    game.next_turn()
-    
-    if len(game.eliminated_players) >= 1:
-        winner = game.players[0] if game.players[0]['id'] not in game.eliminated_players else None
+    # Check for winner BEFORE next turn
+    if len(game.eliminated_players) >= len(game.players) - 1:
+        winner = next((p for p in game.players if p['id'] not in game.eliminated_players), None)
         if winner:
             await application.bot.send_message(chat_id, f"🏆 <b>{winner['name']} WINS!</b>", parse_mode='HTML')
             db.increment_games_played(winner['id'])
         game.reset()
         return
+
+    game.next_turn()
     
     next_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
