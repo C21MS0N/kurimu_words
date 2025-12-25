@@ -1,4 +1,5 @@
 import logging
+import string
 import random
 import sqlite3
 import os
@@ -454,7 +455,9 @@ class GameState:
         if difficulty in DIFFICULTY_MODES:
             self.difficulty = difficulty
             config = DIFFICULTY_MODES[difficulty]
-            self.current_word_length = config['start_length']
+            # Don't reset word length if game is already running
+            if not self.is_running:
+                self.current_word_length = config['start_length']
             return True
         return False
 
@@ -590,86 +593,90 @@ def check_rate_limit(user_id: int, command: str) -> bool:
     return True
 
 async def handle_turn_timeout(chat_id: int, user_id: int, application):
-    await asyncio.sleep(games[chat_id].get_turn_time())
-    
-    if chat_id not in games or not games[chat_id].is_running:
-        return
-    
-    game = games[chat_id]
-    current_player = game.players[game.current_player_index]
-    
-    if current_player['id'] != user_id:
-        return
-    
-    game.eliminated_players.add(user_id)
-    game.reset_streak(user_id)
-    
-    if not game.is_practice:
-        db.update_word_stats(user_id, current_player['name'], "", 0, forfeit=True)
-    
-    if game.is_practice:
-        await application.bot.send_message(
-            chat_id=chat_id,
-            text=f"⏰ <b>TIME'S UP!</b>\n\n❌ You were eliminated due to timeout!\n\n(Practice mode - no points deducted)",
-            parse_mode='HTML'
-        )
-    else:
-        await application.bot.send_message(
-            chat_id=chat_id,
-            text=f"⏰ <b>TIME'S UP!</b>\n\n❌ @{current_player['username']} is eliminated due to timeout!\n\n<i>Forfeit - points earned before timeout still count.</i>",
-            parse_mode='HTML'
-        )
-    
-    game.next_turn()
-    
-    if len(game.eliminated_players) >= len(game.players) - 1:
-        winner = next((p for p in game.players if p['id'] not in game.eliminated_players), None)
-        if winner:
+    """Handle turn timeout - eliminate player"""
+    try:
+        # Get turn time from game state or default
+        if chat_id not in games: return
+        turn_time = games[chat_id].get_turn_time()
+            
+        await asyncio.sleep(turn_time)
+        
+        if chat_id not in games: return
+        game = games[chat_id]
+        
+        # Check if it's still this user's turn
+        current_player = game.players[game.current_player_index]
+        if not game.is_running or current_player['id'] != user_id:
+            return
+
+        # Player timed out
+        game.eliminated_players.add(user_id)
+        game.reset_streak(user_id)
+        
+        if not game.is_practice:
+            db.update_word_stats(user_id, current_player['name'], "", 0, forfeit=True)
+        
+        if game.is_practice:
             await application.bot.send_message(
                 chat_id=chat_id,
-                text=f"🏆 *GAME OVER\\!*\n\n👑 *Winner:* @{winner['username']}",
-                parse_mode='MarkdownV2'
+                text=f"⏰ <b>TIME'S UP!</b>\n\n❌ You were eliminated due to timeout!\n\n(Practice mode - no points deducted)",
+                parse_mode='HTML'
             )
-            # Increment games_played for all participants
+        else:
+            await application.bot.send_message(
+                chat_id=chat_id,
+                text=f"⏰ <b>TIME'S UP!</b>\n\n❌ @{current_player['username']} is eliminated due to timeout!\n\n<i>Forfeit - points earned before timeout still count.</i>",
+                parse_mode='HTML'
+            )
+        
+        game.next_turn()
+        
+        # Check for winner
+        if len(game.eliminated_players) >= len(game.players) - 1:
+            winner = next((p for p in game.players if p['id'] not in game.eliminated_players), None)
+            if winner:
+                await application.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🏆 <b>GAME OVER!</b>\n\n👑 <b>Winner:</b> @{winner['username']}",
+                    parse_mode='HTML'
+                )
+                for player in game.players:
+                    db.increment_games_played(player['id'])
+            game.reset()
+            return
+        
+        # Find next valid player
+        next_player = game.players[game.current_player_index]
+        max_iterations = len(game.players)
+        iterations = 0
+        while next_player['id'] in game.eliminated_players and iterations < max_iterations:
+            game.next_turn()
+            next_player = game.players[game.current_player_index]
+            iterations += 1
+        
+        if next_player['id'] in game.eliminated_players:
             for player in game.players:
                 db.increment_games_played(player['id'])
-        game.reset()
-        return
-    
-    # Find next non-eliminated player with safety check
-    next_player = game.players[game.current_player_index]
-    max_iterations = len(game.players)
-    iterations = 0
-    while next_player['id'] in game.eliminated_players and iterations < max_iterations:
-        game.next_turn()
-        next_player = game.players[game.current_player_index]
-        iterations += 1
-    
-    # Verify we found a valid player
-    if next_player['id'] in game.eliminated_players:
-        # Increment games_played for all participants before reset
-        for player in game.players:
-            db.increment_games_played(player['id'])
-        game.reset()
+            game.reset()
+            await application.bot.send_message(chat_id, "❌ No valid players remaining. Game reset.")
+            return
+        
+        turn_time = game.get_turn_time()
+        game.current_turn_user_id = next_player['id']
+        
         await application.bot.send_message(
             chat_id=chat_id,
-            text="❌ Game error: No valid players remaining. Game reset.",
-            parse_mode='MarkdownV2'
+            text=f"👉 @{next_player['username']}'s Turn\n"
+                 f"Target: <b>{game.current_word_length} letters</b> starting with <b>{game.current_start_letter.upper()}</b>\n"
+                 f"⏱️ <b>Time: {turn_time}s</b>",
+            parse_mode='HTML'
         )
-        return
-    
-    turn_time = game.get_turn_time()
-    game.current_turn_user_id = next_player['id']
-    
-    await application.bot.send_message(
-        chat_id=chat_id,
-        text=f"👉 @{next_player['username']}'s Turn\n"
-             f"Target: *{game.current_word_length} letters* starting with *{game.current_start_letter.upper()}*\n"
-             f"⏱️ *Time: {turn_time}s*",
-        parse_mode='MarkdownV2'
-    )
-    
-    game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], application))
+        game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], application))
+            
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error(f"Error in timeout handler: {e}")
 
 # ==========================================
 # BOT COMMANDS
