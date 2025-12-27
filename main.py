@@ -2045,6 +2045,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("rebound", rebound_boost_command))
                 application.add_handler(CommandHandler("inventory", inventory_command))
                 application.add_handler(CommandHandler("omnipotent", omnipotent_command))
+                application.add_handler(CommandHandler("donate", donate_command))
                 application.add_handler(CommandHandler("authority", authority_command))
                 application.add_handler(CommandHandler("achievements", achievements_command))
                 application.add_handler(CommandHandler("settitle", settitle_command))
