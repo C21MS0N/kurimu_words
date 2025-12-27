@@ -1559,6 +1559,45 @@ Questions? Use /help for game commands!
     """
     await update.message.reply_text(group_description, parse_mode='HTML')
 
+async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check shop points balance"""
+    if is_message_stale(update): return
+    user = update.effective_user
+    
+    stats = db.get_player_stats(user.id)
+    balance = stats['total_score'] if stats else 0
+    
+    is_kami = False
+    active_title = db.get_active_title(user.id)
+    if active_title == 'kami':
+        is_kami = True
+    
+    if is_kami:
+        image_path = "attached_assets/Picsart_25-12-25_07-48-43-245_1766820109612.png"
+        caption = (
+            f"✨ <b>KAMI BALANCE</b> ✨\n\n"
+            f"👤 <b>Developer:</b> {user.first_name}\n"
+            f"💰 <b>Shop Points:</b> {balance} pts\n\n"
+            f"<i>The ultimate power resides here.</i>"
+        )
+        try:
+            await update.message.reply_photo(
+                photo=open(image_path, 'rb'),
+                caption=caption,
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            logger.error(f"Error sending kami balance photo: {e}")
+            await update.message.reply_text(caption, parse_mode='HTML')
+    else:
+        await update.message.reply_text(
+            f"💰 <b>Your Balance</b>\n\n"
+            f"👤 <b>Player:</b> {user.first_name}\n"
+            f"💎 <b>Shop Points:</b> {balance} pts\n\n"
+            f"Use /shop to spend your points!",
+            parse_mode='HTML'
+        )
+
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
@@ -1922,6 +1961,8 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("profile", profile_command))
                 application.add_handler(CommandHandler("practice", practice_command))
                 application.add_handler(CommandHandler("vscpu", vscpu_command))
+                application.add_handler(CommandHandler("balance", balance_command))
+                application.add_handler(CommandHandler("bal", balance_command))
                 application.add_handler(CommandHandler("groupdesc", groupdesc_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
