@@ -1270,6 +1270,57 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     gift_text = "<b>INFINITE pts</b>" if is_infinite else f"<b>+{points} pts</b>"
     await update.message.reply_text(f"✨ @{target_user.username} received {gift_text} from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
 
+async def donate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Transfer points between players"""
+    if is_message_stale(update): return
+    user = update.effective_user
+    
+    if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
+        await update.message.reply_text("❌ Reply to a user's message with /donate [amount]\nExample: Reply to their message with /donate 100")
+        return
+    
+    target_user = update.message.reply_to_message.from_user
+    
+    if target_user.id == user.id:
+        await update.message.reply_text("❌ You cannot donate to yourself!")
+        return
+    
+    if target_user.is_bot:
+        await update.message.reply_text("❌ You cannot donate to bots!")
+        return
+
+    amount = 0
+    if context.args and context.args[0].isdigit():
+        amount = int(context.args[0])
+    else:
+        await update.message.reply_text("❌ Usage: Reply to a message with /donate [amount]\nExample: /donate 100")
+        return
+    
+    if amount <= 0:
+        await update.message.reply_text("❌ Amount must be greater than 0!")
+        return
+    
+    current_balance = db.get_balance(user.id)
+    if current_balance < amount:
+        await update.message.reply_text(f"❌ Insufficient balance! You have {current_balance} pts.")
+        return
+    
+    # Perform transfer
+    db.add_balance(user.id, -amount)
+    db.add_balance(target_user.id, amount)
+    
+    # Ensure target exists in DB
+    db.ensure_player_exists(target_user.id, target_user.first_name)
+    
+    await update.message.reply_text(
+        f"💸 <b>Donation Successful!</b>\n\n"
+        f"👤 <b>From:</b> {user.first_name}\n"
+        f"👤 <b>To:</b> {target_user.first_name}\n"
+        f"💰 <b>Amount:</b> {amount} pts\n\n"
+        f"<i>How generous!</i>",
+        parse_mode='HTML'
+    )
+
 async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     newly_unlocked = db.auto_unlock_titles(user.id)
