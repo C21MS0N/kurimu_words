@@ -1451,7 +1451,13 @@ async def cpu_turn(chat_id: int, application):
         return
     game = games[chat_id]
     
-    await asyncio.sleep(1)
+    # Wait a bit to simulate "thinking"
+    await asyncio.sleep(2)
+    
+    # Ensure it's actually CPU's turn
+    if game.players[game.current_player_index]['id'] != 999999:
+        return
+
     cpu_word = game.get_cpu_word()
     
     if not cpu_word:
@@ -1463,12 +1469,16 @@ async def cpu_turn(chat_id: int, application):
         await application.bot.send_message(chat_id, f"🤖 CPU played: <b>{cpu_word}</b> (+{len(cpu_word)})", parse_mode='HTML')
     
     # Check for winner BEFORE next turn
-    if len(game.eliminated_players) >= len(game.players) - 1:
-        winner = next((p for p in game.players if p['id'] not in game.eliminated_players), None)
+    alive_players = [p for p in game.players if p['id'] not in game.eliminated_players]
+    if len(alive_players) <= 1:
+        winner = alive_players[0] if alive_players else None
         if winner:
             await application.bot.send_message(chat_id, f"🏆 <b>{winner['name']} WINS!</b>", parse_mode='HTML')
-            db.increment_games_played(winner['id'])
+            if winner['id'] != 999999:
+                db.increment_games_played(winner['id'])
         game.reset()
+        if chat_id in games:
+            del games[chat_id]
         return
 
     game.next_turn()
@@ -1484,7 +1494,13 @@ async def cpu_turn(chat_id: int, application):
         f"⏱️ <b>Time: {turn_time}s</b>",
         parse_mode='HTML'
     )
+    
+    # Start timeout task for the next player
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], application))
+    
+    # If the next player is also CPU (unlikely in 1v1 but good for safety), trigger it
+    if next_player['id'] == 999999:
+        asyncio.create_task(cpu_turn(chat_id, application))
 
 async def practice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Me vs Me - Solo practice mode"""
