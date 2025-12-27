@@ -1246,19 +1246,29 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     target_user = update.message.reply_to_message.from_user
     points = 0
+    is_infinite = False
     
-    if context.args and context.args[0].isdigit():
-        points = int(context.args[0])
+    if context.args:
+        arg = context.args[0].lower()
+        if arg == 'infinite' or arg == '∞':
+            is_infinite = True
+            points = 999999999
+        elif arg.isdigit():
+            points = int(arg)
+        else:
+            await update.message.reply_text("❌ Usage: Reply to a message with /omnipotent [points/infinite]\nExample: /omnipotent 100 or /omnipotent infinite")
+            return
     else:
-        await update.message.reply_text("❌ Usage: Reply to a message with /omnipotent [points]\nExample: /omnipotent 100")
+        await update.message.reply_text("❌ Usage: Reply to a message with /omnipotent [points/infinite]\nExample: /omnipotent 100")
         return
     
-    if points <= 0:
+    if not is_infinite and points <= 0:
         await update.message.reply_text("❌ Points must be greater than 0!")
         return
     
     db.add_balance(target_user.id, points)
-    await update.message.reply_text(f"✨ @{target_user.username} received <b>+{points} pts</b> from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
+    gift_text = "<b>INFINITE pts</b>" if is_infinite else f"<b>+{points} pts</b>"
+    await update.message.reply_text(f"✨ @{target_user.username} received {gift_text} from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
 
 async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
