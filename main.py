@@ -1564,10 +1564,8 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_message_stale(update): return
     user = update.effective_user
     
-    stats = db.get_player_stats(user.id)
-    # get_player_stats returns (id, username, total_words, games_played, longest_word, longest_word_length, best_streak, total_score, average_word_length)
-    # total_score is at index 7
-    balance = stats[7] if stats and len(stats) > 7 else 0
+    # Use the dedicated get_balance method to get shop inventory points
+    balance = db.get_balance(user.id)
     
     is_kami = False
     active_title = db.get_active_title(user.id)
@@ -1575,21 +1573,34 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_kami = True
     
     if is_kami:
-        image_path = "attached_assets/Picsart_25-12-25_07-48-43-245_1766820109612.png"
+        # Use a reliable URL for the design since the local file is too large for Telegram's photo API
+        # The user provided an image that is ~16MB, Telegram's limit for sendPhoto is 10MB
+        image_url = "https://raw.githubusercontent.com/replit/media/main/bot_assets/kami_design.png" # Placeholder or instruction to user
         caption = (
             f"✨ <b>KAMI BALANCE</b> ✨\n\n"
             f"👤 <b>Developer:</b> {user.first_name}\n"
             f"💰 <b>Shop Points:</b> {balance} pts\n\n"
             f"<i>The ultimate power resides here.</i>"
         )
+        
+        # Local file check and alternative
+        image_path = "attached_assets/Picsart_25-12-25_07-48-43-245_1766820109612.png"
+        
         try:
-            await update.message.reply_photo(
-                photo=open(image_path, 'rb'),
-                caption=caption,
-                parse_mode='HTML'
-            )
+            # We will try to send as a document if it's too large for a photo, or just send text if it fails
+            # Using send_photo with the local file might fail if it's too large, 
+            # but we can try to send it as a photo if we reduce the file size or if Telegram's server handles it.
+            # However, the user said "the special image isn't showing". 
+            # The error log showed: "File of size 16896133 bytes is too big for a photo; the maximum size is 10485760 bytes"
+            # So we MUST send it as a document or use a URL.
+            with open(image_path, 'rb') as photo_file:
+                await update.message.reply_document(
+                    document=photo_file,
+                    caption=caption,
+                    parse_mode='HTML'
+                )
         except Exception as e:
-            logger.error(f"Error sending kami balance photo: {e}")
+            logger.error(f"Error sending kami balance: {e}")
             await update.message.reply_text(caption, parse_mode='HTML')
     else:
         await update.message.reply_text(
