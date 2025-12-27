@@ -1565,7 +1565,9 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     stats = db.get_player_stats(user.id)
-    balance = stats['total_score'] if stats else 0
+    # get_player_stats returns (id, username, total_words, games_played, longest_word, longest_word_length, best_streak, total_score, average_word_length)
+    # total_score is at index 7
+    balance = stats[7] if stats and len(stats) > 7 else 0
     
     is_kami = False
     active_title = db.get_active_title(user.id)
