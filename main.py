@@ -1559,6 +1559,9 @@ Questions? Use /help for game commands!
     """
     await update.message.reply_text(group_description, parse_mode='HTML')
 
+import os
+from PIL import Image
+
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check shop points balance"""
     if is_message_stale(update): return
@@ -1573,9 +1576,9 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_kami = True
     
     if is_kami:
-        # Use a reliable URL for the design since the local file is too large for Telegram's photo API
-        # The user provided an image that is ~16MB, Telegram's limit for sendPhoto is 10MB
-        image_url = "https://raw.githubusercontent.com/replit/media/main/bot_assets/kami_design.png" # Placeholder or instruction to user
+        image_path = "attached_assets/Picsart_25-12-25_07-48-43-245_1766820109612.png"
+        compressed_path = "attached_assets/kami_balance_compressed.jpg"
+        
         caption = (
             f"✨ <b>KAMI BALANCE</b> ✨\n\n"
             f"👤 <b>Developer:</b> {user.first_name}\n"
@@ -1583,24 +1586,24 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<i>The ultimate power resides here.</i>"
         )
         
-        # Local file check and alternative
-        image_path = "attached_assets/Picsart_25-12-25_07-48-43-245_1766820109612.png"
-        
         try:
-            # We will try to send as a document if it's too large for a photo, or just send text if it fails
-            # Using send_photo with the local file might fail if it's too large, 
-            # but we can try to send it as a photo if we reduce the file size or if Telegram's server handles it.
-            # However, the user said "the special image isn't showing". 
-            # The error log showed: "File of size 16896133 bytes is too big for a photo; the maximum size is 10485760 bytes"
-            # So we MUST send it as a document or use a URL.
-            with open(image_path, 'rb') as photo_file:
-                await update.message.reply_document(
-                    document=photo_file,
+            # Compress image if not already compressed
+            if not os.path.exists(compressed_path):
+                with Image.open(image_path) as img:
+                    if img.mode in ("RGBA", "P"):
+                        img = img.convert("RGB")
+                    # Reduce size significantly to stay under Telegram's limits
+                    img.thumbnail((1024, 1024))
+                    img.save(compressed_path, "JPEG", quality=70, optimize=True)
+            
+            with open(compressed_path, 'rb') as photo_file:
+                await update.message.reply_photo(
+                    photo=photo_file,
                     caption=caption,
                     parse_mode='HTML'
                 )
         except Exception as e:
-            logger.error(f"Error sending kami balance: {e}")
+            logger.error(f"Error sending compressed kami balance: {e}")
             await update.message.reply_text(caption, parse_mode='HTML')
     else:
         await update.message.reply_text(
