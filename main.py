@@ -1828,13 +1828,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game.used_words.add(word)
         game.increment_streak(user.id)
         current_streak = game.get_streak(user.id)
+        
+        streak_bonus = ""
+        if current_streak >= 3:
+            streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
+
+        # Process the turn logic FIRST to avoid any state issues
+        difficulty_increased = game.next_turn()
 
         if not game.is_practice:
             # For CPU games, ensure we store the correct name
             player_name = user.first_name or user.username or "Player"
-            db.update_word_stats(user.id, player_name, word, current_streak)
-
-        difficulty_increased = game.next_turn()
+            try:
+                db.update_word_stats(user.id, player_name, word, current_streak)
+            except Exception as db_err:
+                logger.error(f"Database error: {db_err}")
         
         msg_text = f"✅ '{word}' <b>(+{len(word)})</b>{streak_bonus}\n\n"
         
