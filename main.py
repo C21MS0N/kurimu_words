@@ -1949,9 +1949,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # CPU turn handler
         if game.is_cpu_game and next_player['id'] == 999999:
-            # Don't create timeout task for CPU, just run the turn
-            await asyncio.sleep(1)
-            await cpu_turn(chat_id, context.application)
+            # IMPORTANT: Run CPU turn in background
+            asyncio.create_task(cpu_turn(chat_id, context.application))
         else:
             game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
     except Exception as e:
