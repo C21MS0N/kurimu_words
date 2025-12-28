@@ -1270,6 +1270,30 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     gift_text = "<b>INFINITE pts</b>" if is_infinite else f"<b>+{points} pts</b>"
     await update.message.reply_text(f"✨ @{target_user.username} received {gift_text} from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
 
+async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Claim daily point reward"""
+    if is_message_stale(update): return
+    user = update.effective_user
+    
+    # Get last claim date
+    last_claim = db.get_player_last_daily(user.id)
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    if last_claim == today:
+        await update.message.reply_text("⏳ You've already claimed your daily reward today! Come back tomorrow.")
+        return
+    
+    reward = random.randint(50, 150)
+    db.add_balance(user.id, reward)
+    db.update_player_last_daily(user.id, today)
+    
+    await update.message.reply_text(
+        f"🎁 <b>Daily Reward!</b>\n\n"
+        f"You received <b>{reward} pts</b>!\n"
+        f"Current Balance: <b>{db.get_balance(user.id)} pts</b>",
+        parse_mode='HTML'
+    )
+
 async def donate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Transfer points between players"""
     if is_message_stale(update): return
@@ -2050,6 +2074,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("inventory", inventory_command))
                 application.add_handler(CommandHandler("omnipotent", omnipotent_command))
                 application.add_handler(CommandHandler("donate", donate_command))
+                application.add_handler(CommandHandler("daily", daily_command))
                 application.add_handler(CommandHandler("authority", authority_command))
                 application.add_handler(CommandHandler("achievements", achievements_command))
                 application.add_handler(CommandHandler("settitle", settitle_command))
