@@ -48,7 +48,8 @@ DIFFICULTY_MODES = {
 SHOP_BOOSTS = {
     'hint': {'price': 80, 'description': '📖 Get dictionary meaning of a potential correct word'},
     'skip': {'price': 150, 'description': '⏭️ Skip your turn'},
-    'rebound': {'price': 250, 'description': '🔄 Skip & pass same question to next player'}
+    'rebound': {'price': 250, 'description': '🔄 Skip & pass same question to next player'},
+    'streak': {'price': 400, 'description': '🛡️ Streak Protection - Prevent next streak reset'}
 }
 
 # Game Challenge Sequence (length, letter) - cycles through
@@ -133,6 +134,16 @@ class DatabaseManager:
             c.execute("ALTER TABLE inventory ADD COLUMN balance INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass  # Column already exists
+            
+        try:
+            c.execute("ALTER TABLE inventory ADD COLUMN streak_protect INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+            
+        try:
+            c.execute("ALTER TABLE leaderboard ADD COLUMN last_daily TEXT")
+        except sqlite3.OperationalError:
+            pass
         
         # Create titles table
         c.execute('''
@@ -323,7 +334,7 @@ class DatabaseManager:
     def get_player_last_daily(self, user_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        c.execute("SELECT last_daily FROM stats WHERE user_id = ?", (user_id,))
+        c.execute("SELECT last_daily FROM leaderboard WHERE user_id = ?", (user_id,))
         row = c.fetchone()
         conn.close()
         return row[0] if row else None
@@ -331,7 +342,7 @@ class DatabaseManager:
     def update_player_last_daily(self, user_id, date_str):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        c.execute("UPDATE stats SET last_daily = ? WHERE user_id = ?", (date_str, user_id))
+        c.execute("UPDATE leaderboard SET last_daily = ? WHERE user_id = ?", (date_str, user_id))
         conn.commit()
         conn.close()
 
