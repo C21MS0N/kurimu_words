@@ -1936,7 +1936,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # logger.info(f"DEBUG: Msg from {user.id} ({user.username}), waiting for {current_player['id']} ({current_player['username']})")
 
     # Handle numeric vs string ID comparison safely
-    if str(user.id) != str(current_player['id']): return 
+    if int(user.id) != int(current_player['id']): return 
 
     word = update.message.text.strip().lower()
     
