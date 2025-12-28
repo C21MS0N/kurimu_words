@@ -357,9 +357,10 @@ class DatabaseManager:
                 'hint': result[1], 
                 'skip': result[2], 
                 'rebound': result[3],
+                'streak': result[5] if len(result) > 5 else 0,
                 'streak_protect': result[5] if len(result) > 5 else 0
             }
-        return {'hint': 0, 'skip': 0, 'rebound': 0, 'streak_protect': 0}
+        return {'hint': 0, 'skip': 0, 'rebound': 0, 'streak': 0, 'streak_protect': 0}
     
     def buy_boost(self, user_id, boost_type, price):
         conn = sqlite3.connect(self.db_name)
@@ -1337,7 +1338,7 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ You've already claimed your daily reward today! Come back tomorrow.")
         return
     
-    reward = random.randint(50, 150)
+    reward = 20
     db.add_balance(user.id, reward)
     db.update_player_last_daily(user.id, today)
     
