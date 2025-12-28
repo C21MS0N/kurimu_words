@@ -205,12 +205,14 @@ class DatabaseManager:
         if not stats:
             return False
         reqs = TITLE_REQUIREMENTS[title]
+        
+        # stats mapping: 2: total_words, 3: games_played, 5: longest_word_length, 6: best_streak, 7: total_score
         checks = {
-            'total_score': stats[7] >= reqs.get('total_score', float('inf')),
-            'best_streak': stats[6] >= reqs.get('best_streak', float('inf')),
-            'total_words': stats[2] >= reqs.get('total_words', float('inf')),
-            'games_played': stats[3] >= reqs.get('games_played', float('inf')),
-            'longest_word_length': stats[5] >= reqs.get('longest_word_length', float('inf'))
+            'total_score': stats[7] >= reqs.get('total_score', 0),
+            'best_streak': stats[6] >= reqs.get('best_streak', 0),
+            'total_words': stats[2] >= reqs.get('total_words', 0),
+            'games_played': stats[3] >= reqs.get('games_played', 0),
+            'longest_word_length': stats[5] >= reqs.get('longest_word_length', 0)
         }
         return all(checks.values())
     
@@ -2050,6 +2052,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Process the turn logic FIRST to avoid any state issues
         difficulty_increased = game.next_turn()
+
+        # Check for newly unlocked titles after turn
+        newly_unlocked = db.auto_unlock_titles(user.id)
+        if newly_unlocked:
+            unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
+            for title_key in newly_unlocked:
+                if title_key in TITLES:
+                    unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
+            await update.message.reply_text(unlock_msg, parse_mode='HTML')
 
         if not game.is_practice:
             # For CPU games, ensure we store the correct name
