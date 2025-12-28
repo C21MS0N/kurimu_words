@@ -320,14 +320,35 @@ class DatabaseManager:
         conn.close()
         return result[0] if result else 0
     
+    def get_player_last_daily(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT last_daily FROM stats WHERE user_id = ?", (user_id,))
+        row = c.fetchone()
+        conn.close()
+        return row[0] if row else None
+
+    def update_player_last_daily(self, user_id, date_str):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("UPDATE stats SET last_daily = ? WHERE user_id = ?", (date_str, user_id))
+        conn.commit()
+        conn.close()
+
     def get_inventory(self, user_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
         c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
         result = c.fetchone()
         conn.close()
-        if result: return {'hint': result[1], 'skip': result[2], 'rebound': result[3]}
-        return {'hint': 0, 'skip': 0, 'rebound': 0}
+        if result: 
+            return {
+                'hint': result[1], 
+                'skip': result[2], 
+                'rebound': result[3],
+                'streak_protect': result[5] if len(result) > 5 else 0
+            }
+        return {'hint': 0, 'skip': 0, 'rebound': 0, 'streak_protect': 0}
     
     def buy_boost(self, user_id, boost_type, price):
         conn = sqlite3.connect(self.db_name)
@@ -340,7 +361,16 @@ class DatabaseManager:
             c.execute("INSERT INTO inventory (user_id) VALUES (?)", (user_id,))
         
         c.execute("UPDATE inventory SET balance = balance - ? WHERE user_id=?", (price, user_id))
-        col = f"{boost_type}_count"
+        
+        # Mapping boost_type to column name
+        col_map = {
+            'hint': 'hint_count',
+            'skip': 'skip_count',
+            'rebound': 'rebound_count',
+            'streak': 'streak_protect'
+        }
+        col = col_map.get(boost_type, f"{boost_type}_count")
+        
         c.execute(f"UPDATE inventory SET {col} = {col} + 1 WHERE user_id=?", (user_id,))
         conn.commit()
         conn.close()
@@ -349,7 +379,15 @@ class DatabaseManager:
     def use_boost(self, user_id, boost_type):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        col = f"{boost_type}_count"
+        
+        col_map = {
+            'hint': 'hint_count',
+            'skip': 'skip_count',
+            'rebound': 'rebound_count',
+            'streak_protect': 'streak_protect'
+        }
+        col = col_map.get(boost_type, f"{boost_type}_count")
+        
         c.execute(f"UPDATE inventory SET {col} = {col} - 1 WHERE user_id=?", (user_id,))
         conn.commit()
         conn.close()
@@ -504,7 +542,12 @@ class GameState:
         self.player_streaks[user_id] = self.player_streaks.get(user_id, 0) + 1
 
     def reset_streak(self, user_id: int):
-        self.player_streaks[user_id] = 0
+        if user_id in self.player_streaks:
+            inventory = db.get_inventory(user_id)
+            if inventory.get('streak_protect', 0) > 0:
+                db.use_boost(user_id, 'streak_protect')
+                return
+            self.player_streaks[user_id] = 0
 
     # Removed can_use_hint, use_hint, can_skip, use_skip, get_hint_words methods
 
@@ -1054,13 +1097,13 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     boost_type = None
-    for boost in SHOP_BOOSTS.keys():
-        if f"/buy_{boost}" in message_text:
-            boost_type = boost
-            break
+    if "/buy_hint" in message_text: boost_type = 'hint'
+    elif "/buy_skip" in message_text: boost_type = 'skip'
+    elif "/buy_rebound" in message_text: boost_type = 'rebound'
+    elif "/buy_streak" in message_text: boost_type = 'streak'
     
     if not boost_type:
-        await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, or /buy_rebound")
+        await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, /buy_rebound, or /buy_streak")
         return
     
     price = SHOP_BOOSTS[boost_type]['price']
