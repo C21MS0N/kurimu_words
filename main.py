@@ -1844,6 +1844,8 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"<b>NAME:</b> {target_username}\n"
     if active_title and active_title in TITLES:
         profile_text += f"<b>TITLE:</b> {TITLES[active_title]['display']}\n\n"
+    elif target_user_id == BOT_OWNER_ID:
+        profile_text += f"<b>TITLE:</b> {TITLES['kami']['display']}\n\n"
     else:
         profile_text += f"<b>TITLE:</b> 🔒 Locked\n\n"
     
