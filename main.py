@@ -1824,8 +1824,6 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     active_title = db.get_active_title(target_user_id)
-    if target_user_id == BOT_OWNER_ID:
-        active_title = 'kami'
     
     borders = {
         'kami': ('✨', '✨'),
@@ -1836,7 +1834,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'shadow': ('🌑', '🌑')
     }
     
-    border_char = borders.get(active_title, ('•', '•'))[0]
+    border_char = borders.get(active_title if active_title else ('kami' if target_user_id == BOT_OWNER_ID else None), ('•', '•'))[0]
     
     # Clean and beautiful profile design
     profile_text = f"┌─ <b>👤 PLAYER PROFILE</b> {border_char} ─┐\n\n"
