@@ -2003,6 +2003,11 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Authority command error: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Error! Use: /authority hint=2 skip=1 rebound=0")
 
+    except Exception as e:
+        logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
+        await update.message.reply_text(f"❌ Error processing your word. Try again.")
+        game.used_words.discard(word)
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id not in games or not update.message or not update.message.text: return
@@ -2013,11 +2018,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     current_player = game.players[game.current_player_index]
 
-    # Debug log to see IDs
-    # logger.info(f"DEBUG: Msg from {user.id} ({user.username}), waiting for {current_player['id']} ({current_player['username']})")
-
     # Handle numeric vs string ID comparison safely
-    if int(user.id) != int(current_player['id']): return 
+    if int(user.id) != int(current_player['id']): 
+        return 
 
     word = update.message.text.strip().lower()
     
@@ -2039,21 +2042,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Cancel any pending timeout for the current player
+        # Process the turn logic FIRST to avoid any state issues
         game.cancel_timeout()
-        
         game.used_words.add(word)
         game.increment_streak(user.id)
         current_streak = game.get_streak(user.id)
         
-        streak_bonus = ""
-        if current_streak >= 3:
-            streak_bonus = f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
+        # Update word stats and leaderboard immediately
+        if not game.is_practice:
+            player_name = user.first_name or user.username or "Player"
+            try:
+                db.update_word_stats(user.id, player_name, word, current_streak)
+            except Exception as db_err:
+                logger.error(f"Database error: {db_err}")
 
-        # Process the turn logic FIRST to avoid any state issues
-        difficulty_increased = game.next_turn()
-
-        # Check for newly unlocked titles after turn
+        # Check for newly unlocked titles after stats update
         newly_unlocked = db.auto_unlock_titles(user.id)
         if newly_unlocked:
             unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
@@ -2062,15 +2065,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
             await update.message.reply_text(unlock_msg, parse_mode='HTML')
 
-        if not game.is_practice:
-            # For CPU games, ensure we store the correct name
-            player_name = user.first_name or user.username or "Player"
-            try:
-                db.update_word_stats(user.id, player_name, word, current_streak)
-            except Exception as db_err:
-                logger.error(f"Database error: {db_err}")
+        difficulty_increased = game.next_turn()
         
-        msg_text = f"✅ '{word}' <b>(+{len(word)})</b>{streak_bonus}\n\n"
+        msg_text = f"✅ '{word}' <b>(+{len(word)})</b>"
+        if current_streak >= 3:
+            msg_text += f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
+        msg_text += "\n\n"
         
         if difficulty_increased:
             msg_text += f"⏱️ <b>Time reduced!</b> Difficulty level {game.difficulty_level}\n\n"
