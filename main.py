@@ -2018,7 +2018,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     current_player = game.players[game.current_player_index]
 
+    # Debug log to see IDs
+    # logger.info(f"DEBUG: Msg from {user.id} ({user.username}), waiting for {current_player['id']} ({current_player['username']})")
+
     # Handle numeric vs string ID comparison safely
+    logger.info(f"DEBUG: Msg from {user.id}. Waiting for {current_player['id']}")
     if int(user.id) != int(current_player['id']): 
         return 
 
@@ -2026,11 +2030,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Validation
     if len(word) != game.current_word_length:
-        await update.message.reply_text(f"❌ Word must be exactly {game.current_word_length} letters! Try again.")
+        if int(user.id) == int(current_player['id']):
+            await update.message.reply_text(f"❌ Word must be exactly {game.current_word_length} letters! Try again.")
         return
 
     if not word.startswith(game.current_start_letter):
-        await update.message.reply_text(f"❌ Must start with '{game.current_start_letter.upper()}'! Try again.")
+        if int(user.id) == int(current_player['id']):
+            await update.message.reply_text(f"❌ Must start with '{game.current_start_letter.upper()}'! Try again.")
         return
 
     if word in game.used_words:
@@ -2041,67 +2047,62 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Not in my dictionary! Try again.")
         return
 
-    try:
-        # Process the turn logic FIRST to avoid any state issues
-        game.cancel_timeout()
-        game.used_words.add(word)
-        game.increment_streak(user.id)
-        current_streak = game.get_streak(user.id)
-        
-        # Update word stats and leaderboard immediately
-        if not game.is_practice:
-            player_name = user.first_name or user.username or "Player"
-            try:
-                db.update_word_stats(user.id, player_name, word, current_streak)
-            except Exception as db_err:
-                logger.error(f"Database error: {db_err}")
+    # Process the turn logic FIRST to avoid any state issues
+    game.cancel_timeout()
+    game.used_words.add(word)
+    game.increment_streak(user.id)
+    current_streak = game.get_streak(user.id)
+    
+    # Update word stats and leaderboard immediately
+    if not game.is_practice:
+        player_name = user.first_name or user.username or "Player"
+        try:
+            db.update_word_stats(user.id, player_name, word, current_streak)
+        except Exception as db_err:
+            logger.error(f"Database error: {db_err}")
 
-        # Check for newly unlocked titles after stats update
-        newly_unlocked = db.auto_unlock_titles(user.id)
-        if newly_unlocked:
-            unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
-            for title_key in newly_unlocked:
-                if title_key in TITLES:
-                    unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
-            await update.message.reply_text(unlock_msg, parse_mode='HTML')
+    # Check for newly unlocked titles after stats update
+    newly_unlocked = db.auto_unlock_titles(user.id)
+    if newly_unlocked:
+        unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
+        for title_key in newly_unlocked:
+            if title_key in TITLES:
+                unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
+        await update.message.reply_text(unlock_msg, parse_mode='HTML')
 
-        difficulty_increased = game.next_turn()
-        
-        msg_text = f"✅ '{word}' <b>(+{len(word)})</b>"
-        if current_streak >= 3:
-            msg_text += f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
-        msg_text += "\n\n"
-        
-        if difficulty_increased:
-            msg_text += f"⏱️ <b>Time reduced!</b> Difficulty level {game.difficulty_level}\n\n"
-        
-        next_player = game.players[game.current_player_index]
-        turn_time = game.get_turn_time()
-        game.current_turn_user_id = next_player['id']
-        
-        if game.is_practice:
-            msg_text += f"💪 <b>Next Challenge:</b>\n"
-            msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-            msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
-        elif game.is_cpu_game and next_player['id'] == 999999:
-            msg_text += f"🤖 <b>CPU's Turn...</b>"
-        else:
-            msg_text += f"👉 @{next_player['username']}'s Turn\n"
-            msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
-            msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
+    difficulty_increased = game.next_turn()
+    
+    msg_text = f"✅ '{word}' <b>(+{len(word)})</b>"
+    if current_streak >= 3:
+        msg_text += f"\n🔥 <b>{current_streak} STREAK!</b> You're on fire!"
+    msg_text += "\n\n"
+    
+    if difficulty_increased:
+        msg_text += f"⏱️ <b>Time reduced!</b> Difficulty level {game.difficulty_level}\n\n"
+    
+    next_player = game.players[game.current_player_index]
+    turn_time = game.get_turn_time()
+    game.current_turn_user_id = next_player['id']
+    
+    if game.is_practice:
+        msg_text += f"💪 <b>Next Challenge:</b>\n"
+        msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
+    elif game.is_cpu_game and next_player['id'] == 999999:
+        msg_text += f"🤖 <b>CPU's Turn...</b>"
+    else:
+        msg_text += f"👉 @{next_player['username']}'s Turn\n"
+        msg_text += f"Target: <b>exactly {game.current_word_length} letters</b> starting with <b>'{game.current_start_letter.upper()}'</b>\n"
+        msg_text += f"⏱️ <b>Time: {turn_time}s</b>"
 
-        await update.message.reply_text(msg_text, parse_mode='HTML')
-        
-        # CPU turn handler
-        if game.is_cpu_game and next_player['id'] == 999999:
-            # IMPORTANT: Run CPU turn in background
-            asyncio.create_task(cpu_turn(chat_id, context.application))
-        else:
-            game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
-    except Exception as e:
-        logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
-        await update.message.reply_text(f"❌ Error processing your word. Try again.")
-        game.used_words.discard(word)
+    await update.message.reply_text(msg_text, parse_mode='HTML')
+    
+    # CPU turn handler
+    if game.is_cpu_game and next_player['id'] == 999999:
+        # IMPORTANT: Run CPU turn in background
+        asyncio.create_task(cpu_turn(chat_id, context.application))
+    else:
+        game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
 
 # ==========================================
