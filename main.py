@@ -2040,11 +2040,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if word in game.used_words:
-        await update.message.reply_text("❌ Word already used! Try another.")
+        if int(user.id) == int(current_player['id']):
+            await update.message.reply_text("❌ Word already used! Try another.")
         return
 
     if word not in game.dictionary:
-        await update.message.reply_text("❌ Not in my dictionary! Try again.")
+        if int(user.id) == int(current_player['id']):
+            await update.message.reply_text("❌ Not in my dictionary! Try again.")
         return
 
     # Process the turn logic FIRST to avoid any state issues
