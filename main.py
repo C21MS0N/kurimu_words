@@ -2024,7 +2024,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_user_id = str(current_player['id'])
 
     if msg_user_id != target_user_id:
-        # Ignore messages from other players during someone else's turn
+        # Prevent "Turn Stealing" - Log attempts from other players
+        active_ids = [str(p['id']) for p in game.players if p['id'] not in game.eliminated_players]
+        if msg_user_id in active_ids:
+            logger.warning(f"Turn intercept blocked: {user.first_name} ({msg_user_id}) tried to play during {current_player.get('first_name', 'target')}'s ({target_user_id}) turn.")
         return
 
     word = update.message.text.strip().lower()
