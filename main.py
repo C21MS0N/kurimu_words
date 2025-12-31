@@ -2015,37 +2015,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = games[chat_id]
     if not game.is_running: return
 
+    # Turn Validation & Type-Safe ID Check
     user = update.effective_user
     current_player = game.players[game.current_player_index]
+    
+    # Normalize IDs to strings for comparison
+    msg_user_id = str(user.id)
+    target_user_id = str(current_player['id'])
 
-    # Debug log to see IDs
-    # logger.info(f"DEBUG: Msg from {user.id} ({user.username}), waiting for {current_player['id']} ({current_player['username']})")
-
-    # Handle numeric vs string ID comparison safely
-    if int(user.id) != int(current_player['id']): 
-        return 
+    if msg_user_id != target_user_id:
+        # Ignore messages from other players during someone else's turn
+        return
 
     word = update.message.text.strip().lower()
     
     # Validation
     if len(word) != game.current_word_length:
-        if int(user.id) == int(current_player['id']):
-            await update.message.reply_text(f"❌ Word must be exactly {game.current_word_length} letters! Try again.")
+        await update.message.reply_text(f"❌ Word must be exactly {game.current_word_length} letters! Try again.")
         return
 
     if not word.startswith(game.current_start_letter):
-        if int(user.id) == int(current_player['id']):
-            await update.message.reply_text(f"❌ Must start with '{game.current_start_letter.upper()}'! Try again.")
+        await update.message.reply_text(f"❌ Must start with '{game.current_start_letter.upper()}'! Try again.")
         return
 
     if word in game.used_words:
-        if int(user.id) == int(current_player['id']):
-            await update.message.reply_text("❌ Word already used! Try another.")
+        await update.message.reply_text("❌ Word already used! Try another.")
         return
 
     if word not in game.dictionary:
-        if int(user.id) == int(current_player['id']):
-            await update.message.reply_text("❌ Not in my dictionary! Try again.")
+        await update.message.reply_text("❌ Not in my dictionary! Try again.")
         return
 
     # Process the turn logic FIRST to avoid any state issues
