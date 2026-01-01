@@ -514,22 +514,23 @@ class GameState:
             return True
         return False
 
-    def next_turn(self):
+    def next_turn(self, preserve_challenge=False):
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
         self.turn_count += 1
 
-        # Randomize challenges based on mode
-        self.current_start_letter = random.choice(string.ascii_lowercase)
-        
-        if self.game_mode == 'chaos':
-            # Chaos: random length (3-12)
-            self.current_word_length = random.randint(3, 12)
-        else:
-            # Nerd: progressive length
-            # Starts at 3, increases every round (all players have one turn)
-            num_players = len(self.players) if self.players else 1
-            rounds_completed = self.turn_count // num_players
-            self.current_word_length = min(3 + rounds_completed, 15)
+        if not preserve_challenge:
+            # Randomize challenges based on mode
+            self.current_start_letter = random.choice(string.ascii_lowercase)
+            
+            if self.game_mode == 'chaos':
+                # Chaos: random length (3-12)
+                self.current_word_length = random.randint(3, 12)
+            else:
+                # Nerd: progressive length
+                # Starts at 3, increases every round (all players have one turn)
+                num_players = len(self.players) if self.players else 1
+                rounds_completed = self.turn_count // num_players
+                self.current_word_length = min(3 + rounds_completed, 15)
 
         difficulty_increased = self.turn_count % 6 == 0
         if difficulty_increased:
@@ -1254,9 +1255,8 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
     
     db.use_boost(user.id, 'rebound')
     game.cancel_timeout()
-    game.rebound_target_letter = game.current_start_letter
-    game.rebound_target_length = game.current_word_length
-    game.next_turn()
+    # Pass preserve_challenge=True to keep the same letter and length
+    game.next_turn(preserve_challenge=True)
     next_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
     game.current_turn_user_id = next_player['id']
