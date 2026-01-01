@@ -2030,7 +2030,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning(f"Turn intercept blocked: {user.first_name} ({msg_user_id}) tried to play during {current_player.get('first_name', 'target')}'s ({target_user_id}) turn.")
         return
 
-    word = update.message.text.strip().lower()
+    word_raw = update.message.text.strip()
+    # Check if the message contains spaces - game answers are always single words
+    if ' ' in word_raw:
+        return
+
+    word = word_raw.lower()
     
     # Validation
     if len(word) != game.current_word_length:
