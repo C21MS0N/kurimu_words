@@ -1226,7 +1226,7 @@ async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     game.next_turn()
     next_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
-    game.current_turn_user_id = next_player['id']
+    game.current_turn_user_id = str(next_player['id'])
     
     await update.message.reply_text(f"⏭️ @{user.username} used skip boost\\!\n\n👉 @{next_player['username']}'s Turn\nTarget: *exactly {game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
@@ -1259,7 +1259,7 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
     game.next_turn(preserve_challenge=True)
     next_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
-    game.current_turn_user_id = next_player['id']
+    game.current_turn_user_id = str(next_player['id'])
     
     await update.message.reply_text(f"🔄 @{user.username} rebounded\\!\n\n👉 @{next_player['username']}'s Turn \\(SAME QUESTION\\)\nTarget: *exactly {game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
