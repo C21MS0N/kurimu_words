@@ -65,23 +65,22 @@ CHALLENGE_SEQUENCE = [
 # Bot Owner (for exclusive KAMI title) - Set via environment variable or hardcode here
 BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env var to your Telegram user ID
 
-# Available Titles with Dynamic Requirements
-TITLES = {
-    'legend': {'display': '👑 LEGEND 👑', 'color': '🟡', 'requirement': 'total_score >= 1000'},
-    'warrior': {'display': '⚔️ WARRIOR ⚔️', 'color': '🔴', 'requirement': 'best_streak >= 10'},
-    'sage': {'display': '🧙 SAGE 🧙', 'color': '🟣', 'requirement': 'total_words >= 50'},
-    'phoenix': {'display': '🔥 PHOENIX 🔥', 'color': '🟠', 'requirement': 'games_played >= 10'},
-    'shadow': {'display': '🌑 SHADOW 🌑', 'color': '⚫', 'requirement': 'longest_word_length >= 12'},
-    'kami': {'display': '✨ KAMI ✨', 'color': '💎', 'exclusive': True}
+# Available Titles with Dynamic Requirements (Multi-Stage)
+STAGES = {
+    1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 1},
+    2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 2.5},
+    3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 5},
+    4: {'display': 'Ⅳ', 'color': '🟡', 'multiplier': 10},
+    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 25},
 }
 
-# Title Requirements (matched to title themes)
-TITLE_REQUIREMENTS = {
-    'legend': {'total_score': 1000, 'desc': '👑 Reach 1000 total points'},
-    'warrior': {'best_streak': 10, 'desc': '⚔️ Achieve 10+ word streak'},
-    'sage': {'total_words': 50, 'desc': '🧙 Submit 50+ words'},
-    'phoenix': {'games_played': 10, 'desc': '🔥 Complete 10+ games (rebirth)'},
-    'shadow': {'longest_word_length': 12, 'desc': '🌑 Find a 12+ letter word (hidden)'},
+TITLES = {
+    'legend': {'display': '👑 LEGEND', 'base_req': 1000, 'stat': 'total_score', 'desc': 'Reach {req} total points'},
+    'warrior': {'display': '⚔️ WARRIOR', 'base_req': 10, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
+    'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req}+ words'},
+    'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req}+ games'},
+    'shadow': {'display': '🌑 SHADOW', 'base_req': 12, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
+    'kami': {'display': '✨ KAMI', 'exclusive': True}
 }
 
 # ==========================================
@@ -196,34 +195,81 @@ class DatabaseManager:
         c.execute("SELECT unlocked_titles FROM titles WHERE user_id=?", (user_id,))
         result = c.fetchone()
         conn.close()
-        return set(result[0].split(',')) if result and result[0] else set()
+        # Format: "title:stage,title:stage"
+        return result[0].split(',') if result and result[0] else []
     
-    def check_title_unlock(self, user_id, title):
-        if title not in TITLE_REQUIREMENTS:
-            return True
+    def get_title_stage(self, user_id, title_key):
+        unlocked = self.get_unlocked_titles(user_id)
+        for entry in unlocked:
+            if ':' in entry:
+                k, s = entry.split(':')
+                if k == title_key:
+                    return int(s)
+        return 0
+
+    def unlock_title_stage(self, user_id, title_key, stage):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        unlocked = self.get_unlocked_titles(user_id)
+        
+        # Update or add
+        new_unlocked = []
+        found = False
+        for entry in unlocked:
+            if ':' in entry:
+                k, s = entry.split(':')
+                if k == title_key:
+                    new_unlocked.append(f"{title_key}:{stage}")
+                    found = True
+                else:
+                    new_unlocked.append(entry)
+            else:
+                new_unlocked.append(entry)
+        
+        if not found:
+            new_unlocked.append(f"{title_key}:{stage}")
+            
+        c.execute("UPDATE titles SET unlocked_titles = ? WHERE user_id=?", (','.join(new_unlocked), user_id))
+        conn.commit()
+        conn.close()
+
+    def check_title_unlock(self, user_id, title_key, stage=1):
+        if title_key == 'kami':
+            return user_id == BOT_OWNER_ID
+        
+        if title_key not in TITLES:
+            return False
+            
         stats = self.get_player_stats(user_id)
         if not stats:
             return False
-        reqs = TITLE_REQUIREMENTS[title]
+            
+        title_data = TITLES[title_key]
+        req_val = int(title_data['base_req'] * STAGES[stage]['multiplier'])
         
         # stats mapping: 2: total_words, 3: games_played, 5: longest_word_length, 6: best_streak, 7: total_score
-        checks = {
-            'total_score': stats[7] >= reqs.get('total_score', 0),
-            'best_streak': stats[6] >= reqs.get('best_streak', 0),
-            'total_words': stats[2] >= reqs.get('total_words', 0),
-            'games_played': stats[3] >= reqs.get('games_played', 0),
-            'longest_word_length': stats[5] >= reqs.get('longest_word_length', 0)
+        stat_map = {
+            'total_words': stats[2],
+            'games_played': stats[3],
+            'longest_word_length': stats[5],
+            'best_streak': stats[6],
+            'total_score': stats[7]
         }
-        return all(checks.values())
+        
+        return stat_map.get(title_data['stat'], 0) >= req_val
     
     def auto_unlock_titles(self, user_id):
-        """Auto-unlock all titles the user qualifies for based on current stats. Returns newly unlocked titles."""
-        unlocked = self.get_unlocked_titles(user_id)
         newly_unlocked = []
-        for title_key in TITLE_REQUIREMENTS.keys():
-            if title_key not in unlocked and self.check_title_unlock(user_id, title_key):
-                self.unlock_title(user_id, title_key)
-                newly_unlocked.append(title_key)
+        for title_key, title_data in TITLES.items():
+            if title_key == 'kami': continue
+            
+            current_stage = self.get_title_stage(user_id, title_key)
+            for stage in range(current_stage + 1, 6):
+                if self.check_title_unlock(user_id, title_key, stage):
+                    self.unlock_title_stage(user_id, title_key, stage)
+                    newly_unlocked.append((title_key, stage))
+                else:
+                    break
         return newly_unlocked
 
     def update_word_stats(self, user_id, username, word, streak=0, forfeit=False):
