@@ -1453,73 +1453,131 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
     newly_unlocked = db.auto_unlock_titles(user.id)
     
     if newly_unlocked:
-        unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
-        for title_key in newly_unlocked:
-            if title_key in TITLES:
-                unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
+        unlock_msg = "🎊 <b>ACHIEVEMENT LEVELED UP!</b> 🎊\n\n"
+        for title_key, stage in newly_unlocked:
+            title_data = TITLES[title_key]
+            stage_data = STAGES[stage]
+            unlock_msg += f"{stage_data['color']} <b>{title_data['display']} {stage_data['display']}</b>\n"
         await update.message.reply_text(unlock_msg, parse_mode='HTML')
     
-    unlocked = db.get_unlocked_titles(user.id)
+    unlocked_list = db.get_unlocked_titles(user.id)
+    unlocked_stages = {}
+    for entry in unlocked_list:
+        if ':' in entry:
+            k, s = entry.split(':')
+            unlocked_stages[k] = int(s)
+            
     active = db.get_active_title(user.id)
-    stats = db.get_player_stats(user.id)
     
-    text = "🏆 <b>Available Titles</b>\n\n"
+    text = "🏆 <b>Achievement Stages</b>\n\n"
     for title_key, title_data in TITLES.items():
-        is_exclusive = title_data.get('exclusive', False)
-        
-        if is_exclusive and user.id != BOT_OWNER_ID:
+        if title_data.get('exclusive'):
+            if user.id == BOT_OWNER_ID:
+                text += f"✨ <b>{title_data['display']}</b>\n  <i>Superior Divine Title</i>\n\n"
             continue
+            
+        current_stage = unlocked_stages.get(title_key, 0)
+        text += f"<b>{title_data['display']}</b> "
+        for s in range(1, 6):
+            if s <= current_stage:
+                text += STAGES[s]['display']
+            else:
+                text += "▫️"
         
-        is_unlocked = title_key in unlocked or (is_exclusive and user.id == BOT_OWNER_ID)
-        status = "🔓" if is_unlocked else "🔒"
-        active_mark = "⭐" if title_key == active else ""
+        active_mark = " ⭐" if title_key == active else ""
+        text += active_mark + "\n"
         
-        text += f"{status} {title_data['display']} {active_mark}\n"
-        
-        if not is_unlocked and title_key in TITLE_REQUIREMENTS and stats:
-            req = TITLE_REQUIREMENTS[title_key]
-            text += f"  {req['desc']}\n"
-        elif is_exclusive and user.id == BOT_OWNER_ID:
-            text += "  (Exclusive Owner Title)\n"
+        if current_stage < 5:
+            next_stage = current_stage + 1
+            req_val = int(title_data['base_req'] * STAGES[next_stage]['multiplier'])
+            desc = title_data['desc'].format(req=req_val)
+            text += f"  <i>Next: {desc}</i>\n"
+        else:
+            text += "  <i>MAX LEVEL REACHED!</i> 💎\n"
+        text += "\n"
     
-    text += "\n/settitle [title] to activate\n/progress to see unlock status"
+    text += "Use /settitle [title] to equip.\nUse /profile to see your beautiful progress!"
     await update.message.reply_text(text, parse_mode='HTML')
 
 async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Progress is now integrated into achievements and profile
+    await achievements_command(update, context)
+
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    newly_unlocked = db.auto_unlock_titles(user.id)
-    
-    if newly_unlocked:
-        unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
-        for title_key in newly_unlocked:
-            if title_key in TITLES:
-                unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
-        await update.message.reply_text(unlock_msg, parse_mode='HTML')
-    
-    stats = db.get_player_stats(user.id)
-    
-    if not stats:
-        await update.message.reply_text("📊 No stats yet! Play some games to unlock titles.", parse_mode='HTML')
-        return
-    
-    text = f"📊 <b>Your Progress</b>\n\n"
-    text += f"🎯 Total Score: {stats[7]}/1000 ({int(stats[7]/10)}%)\n"
-    text += f"⚔️ Best Streak: {stats[6]}/10 ({int(stats[6]/10*100)}%)\n"
-    text += f"📝 Words: {stats[2]}/50 ({int(stats[2]/50*100)}%)\n"
-    text += f"🔥 Games: {stats[3]}/10 ({int(stats[3]/10*100)}%)\n"
-    text += f"🌑 Longest Word: {stats[5]}/12 letters\n\n"
-    
-    text += "<b>Unlocked Titles:</b>\n"
-    unlocked = db.get_unlocked_titles(user.id)
-    if user.id == BOT_OWNER_ID:
-        unlocked.add('kami')
-    
-    if unlocked:
-        for t in unlocked:
-            if t in TITLES:
-                text += f"✅ {TITLES[t]['display']}\n"
+    if update.message.reply_to_message:
+        target_user = update.message.reply_to_message.from_user
     else:
-        text += "None yet. Keep playing!\n"
+        target_user = user
+
+    stats = db.get_player_stats(target_user.id)
+    if not stats:
+        await update.message.reply_text("👤 User has no record yet!")
+        return
+
+    unlocked_list = db.get_unlocked_titles(target_user.id)
+    unlocked_stages = {}
+    total_stages = 0
+    for entry in unlocked_list:
+        if ':' in entry:
+            k, s = entry.split(':')
+            val = int(s)
+            unlocked_stages[k] = val
+            total_stages += val
+    
+    active_key = db.get_active_title(target_user.id)
+    title_display = ""
+    is_kami = False
+    
+    if active_key in TITLES:
+        if TITLES[active_key].get('exclusive'):
+            title_display = f"✨ <b>{TITLES[active_key]['display']}</b> ✨"
+            is_kami = True
+        else:
+            stage = unlocked_stages.get(active_key, 1)
+            stage_data = STAGES[stage]
+            title_display = f"{stage_data['color']} <b>{TITLES[active_key]['display']} {stage_data['display']}</b>"
+    
+    # Beauty level design
+    if is_kami:
+        beauty_border = "✧ ══════════════════ ✧"
+        profile_header = "💠 <b>DIVINE PROFILE</b> 💠"
+    else:
+        beauty_border = "══════════════════"
+        if total_stages >= 20: beauty_border = "✨✨✨✨✨✨✨✨✨✨✨"
+        elif total_stages >= 15: beauty_border = "💠💠💠💠💠💠💠💠💠💠💠"
+        elif total_stages >= 10: beauty_border = "🔶🔶🔶🔶🔶🔶🔶🔶🔶🔶🔶"
+        elif total_stages >= 5: beauty_border = "🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹"
+        profile_header = "👤 <b>PLAYER PROFILE</b>"
+
+    text = f"{beauty_border}\n"
+    text += f"{profile_header}\n"
+    text += f"{beauty_border}\n\n"
+    
+    text += f"<b>Name:</b> {target_user.first_name}\n"
+    if title_display:
+        text += f"<b>Title:</b> {title_display}\n"
+    text += f"<b>Balance:</b> 💰 {db.get_balance(target_user.id)} pts\n\n"
+    
+    text += f"📊 <b>GAME STATISTICS</b>\n"
+    text += f"• Score: <code>{stats[7]}</code>\n"
+    text += f"• Words: <code>{stats[2]}</code>\n"
+    text += f"• Streak: <code>{stats[6]}</code>\n"
+    text += f"• Longest: <code>{stats[5]}</code>\n"
+    text += f"• Games: <code>{stats[3]}</code>\n\n"
+    
+    if not is_kami:
+        text += f"🏆 <b>MASTERY LEVELS</b>\n"
+        for t_key, t_data in TITLES.items():
+            if t_data.get('exclusive'): continue
+            stage = unlocked_stages.get(t_key, 0)
+            bar = "▰" * stage + "▱" * (5 - stage)
+            text += f"{t_data['display'][:2]} {bar} ({stage}/5)\n"
+    else:
+        text += f"✨ <b>DIVINE STATUS ACTIVE</b> ✨\n"
+        text += f"<i>All knowledge and power is yours.</i>\n"
+    
+    text += f"\n{beauty_border}"
     
     await update.message.reply_text(text, parse_mode='HTML')
 
