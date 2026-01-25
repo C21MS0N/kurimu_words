@@ -1525,6 +1525,11 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             unlocked_stages[k] = val
             total_stages += val
     
+    # Handle KAMI title specifically for unlocked check
+    if target_user.id == BOT_OWNER_ID:
+        # We don't necessarily add it to the list here as we check BOT_OWNER_ID below
+        pass
+
     active_key = db.get_active_title(target_user.id)
     title_display = ""
     is_kami = False
