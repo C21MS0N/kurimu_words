@@ -1967,11 +1967,26 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"<b>🏆 ACHIEVEMENTS</b>\n"
     
     unlocked = db.get_unlocked_titles(target_user_id)
-    if target_user_id == BOT_OWNER_ID:
-        unlocked.add('kami')
     
-    if unlocked:
-        achievement_list = [TITLES[t]['display'] for t in unlocked if t in TITLES]
+    # Filter and format achievement list
+    achievement_list = []
+    unlocked_stages = {}
+    for entry in unlocked:
+        if ':' in entry:
+            try:
+                k, s = entry.split(':')
+                unlocked_stages[k] = int(s)
+                if k in TITLES:
+                    stage_suffix = STAGES.get(int(s), STAGES[1])['display']
+                    achievement_list.append(f"{TITLES[k]['display']} {stage_suffix}")
+            except: continue
+        elif entry in TITLES: # Legacy support
+            achievement_list.append(TITLES[entry]['display'])
+
+    if target_user_id == BOT_OWNER_ID:
+        achievement_list.insert(0, TITLES['kami']['display'])
+    
+    if achievement_list:
         for i, achievement in enumerate(achievement_list):
             if i == len(achievement_list) - 1:
                 profile_text += f"└ {achievement}\n"
