@@ -149,9 +149,21 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS titles (
                 user_id INTEGER PRIMARY KEY,
                 active_title TEXT DEFAULT '',
-                unlocked_titles TEXT DEFAULT ''
+                unlocked_titles TEXT DEFAULT '',
+                bio TEXT DEFAULT '',
+                has_bio_access INTEGER DEFAULT 0
             )
         ''')
+        
+        # Migration for existing titles table
+        try:
+            c.execute("ALTER TABLE titles ADD COLUMN bio TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute("ALTER TABLE titles ADD COLUMN has_bio_access INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         
         conn.commit()
         conn.close()
@@ -422,6 +434,12 @@ class DatabaseManager:
         
         c.execute("UPDATE inventory SET balance = balance - ? WHERE user_id=?", (price, user_id))
         
+        if boost_type == 'bio':
+            c.execute("UPDATE titles SET has_bio_access = 1 WHERE user_id=?", (user_id,))
+            conn.commit()
+            conn.close()
+            return True
+
         # Mapping boost_type to column name
         col_map = {
             'hint': 'hint_count',
@@ -452,14 +470,18 @@ class DatabaseManager:
         conn.commit()
         conn.close()
     
-    def add_balance(self, user_id, points):
+    def get_bio(self, user_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
-        if not c.fetchone():
-            c.execute("INSERT INTO inventory (user_id, balance) VALUES (?, ?)", (user_id, points))
-        else:
-            c.execute("UPDATE inventory SET balance = balance + ? WHERE user_id=?", (points, user_id))
+        c.execute("SELECT bio, has_bio_access FROM titles WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        return result if result else (None, 0)
+
+    def set_bio(self, user_id, bio_text):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("UPDATE titles SET bio = ?, has_bio_access = 0 WHERE user_id=?", (bio_text, user_id))
         conn.commit()
         conn.close()
 
@@ -1122,6 +1144,26 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
+async def setbio_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    bio, has_access = db.get_bio(user.id)
+    
+    if not has_access:
+        await update.message.reply_text("❌ You need to purchase 'Bio Access' from the /shop for 500 pts first!")
+        return
+        
+    if not context.args:
+        await update.message.reply_text("📝 Usage: /setbio [your text]\nMax 40 words.")
+        return
+        
+    bio_text = " ".join(context.args)
+    if len(bio_text.split()) > 40:
+        await update.message.reply_text("❌ Bio is too long! Max 40 words allowed.")
+        return
+        
+    db.set_bio(user.id, bio_text)
+    await update.message.reply_text("✅ Bio updated! To change it again, you'll need to buy another Bio Access.")
+
 async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
@@ -1162,14 +1204,18 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "/buy_skip" in message_text: boost_type = 'skip'
     elif "/buy_rebound" in message_text: boost_type = 'rebound'
     elif "/buy_streak" in message_text: boost_type = 'streak'
+    elif "/buy_bio" in message_text: boost_type = 'bio'
     
     if not boost_type:
-        await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, /buy_rebound, or /buy_streak")
+        await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, /buy_rebound, /buy_streak, or /buy_bio")
         return
     
-    price = SHOP_BOOSTS[boost_type]['price']
+    price = 500 if boost_type == 'bio' else SHOP_BOOSTS[boost_type]['price']
     if db.buy_boost(user.id, boost_type, price):
-        await update.message.reply_text(f"✅ Purchased {boost_type}! (-{price} pts)")
+        if boost_type == 'bio':
+            await update.message.reply_text("✅ <b>Bio Access Purchased!</b>\n\nUse /setbio [text] to set your custom profile message (Max 40 words).", parse_mode='HTML')
+        else:
+            await update.message.reply_text(f"✅ Purchased {boost_type}! (-{price} pts)")
     else:
         balance = db.get_balance(user.id)
         await update.message.reply_text(f"❌ Insufficient balance! Need {price} pts, have {balance} pts")
@@ -1543,10 +1589,10 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Beauty level design
     if is_kami:
-        beauty_border = "✧ ══════════════════ ✧"
+        beauty_border = "✧ ════════════════ ✧"
         profile_header = "💠 <b>DIVINE PROFILE</b> 💠"
     else:
-        beauty_border = "══════════════════"
+        beauty_border = "════════════════"
         if total_stages >= 20: beauty_border = "✨✨✨✨✨✨✨✨✨✨✨"
         elif total_stages >= 15: beauty_border = "💠💠💠💠💠💠💠💠💠💠💠"
         elif total_stages >= 10: beauty_border = "🔶🔶🔶🔶🔶🔶🔶🔶🔶🔶🔶"
@@ -1578,7 +1624,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"{t_data['display'][:2]} {bar} ({stage}/5)\n"
     else:
         text += f"✨ <b>DIVINE STATUS ACTIVE</b> ✨\n"
-        text += f"<i>All knowledge and power is yours.</i>\n"
+        text += f"<i>Official Android 18 gooner.</i>\n"
     
     text += f"\n{beauty_border}"
     
@@ -1943,6 +1989,19 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except (ValueError, IndexError):
                 continue
     
+    unlocked_list = db.get_unlocked_titles(target_user_id)
+    unlocked_stages = {}
+    total_stages = 0
+    for entry in unlocked_list:
+        if ':' in entry:
+            try:
+                k, s = entry.split(':')
+                val = int(s)
+                unlocked_stages[k] = val
+                total_stages += val
+            except (ValueError, IndexError):
+                continue
+
     # Determine active title and Divine status
     active_key = db.get_active_title(target_user_id)
     title_display = ""
@@ -1984,6 +2043,12 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         profile_text += f"<b>TITLE:</b> 🔒 Locked\n\n"
     
+    # Bio section
+    bio_data, _ = db.get_bio(target_user_id)
+    if bio_data:
+        profile_text += f"<b>📝 BIO</b>\n"
+        profile_text += f"<i>{bio_data}</i>\n\n"
+
     # Statistics section
     profile_text += f"<b>📊 STATISTICS</b>\n"
     profile_text += f"├ 🎯 Score: {stats[7]}\n"
