@@ -1520,16 +1520,14 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_stages = 0
     for entry in unlocked_list:
         if ':' in entry:
-            k, s = entry.split(':')
-            val = int(s)
-            unlocked_stages[k] = val
-            total_stages += val
+            try:
+                k, s = entry.split(':')
+                val = int(s)
+                unlocked_stages[k] = val
+                total_stages += val
+            except (ValueError, IndexError):
+                continue
     
-    # Handle KAMI title specifically for unlocked check
-    if target_user.id == BOT_OWNER_ID:
-        # We don't necessarily add it to the list here as we check BOT_OWNER_ID below
-        pass
-
     active_key = db.get_active_title(target_user.id)
     title_display = ""
     is_kami = False
@@ -1540,7 +1538,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_kami = True
         else:
             stage = unlocked_stages.get(active_key, 1)
-            stage_data = STAGES[stage]
+            stage_data = STAGES.get(stage, STAGES[1])
             title_display = f"{stage_data['color']} <b>{TITLES[active_key]['display']} {stage_data['display']}</b>"
     
     # Beauty level design
