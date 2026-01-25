@@ -1943,14 +1943,33 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     border_char = borders.get(active_title if active_title else ('kami' if target_user_id == BOT_OWNER_ID else None), ('•', '•'))[0]
     
-    # Clean and beautiful profile design
-    profile_text = f"┌─ <b>👤 PLAYER PROFILE</b> {border_char} ─┐\n\n"
+    # Beauty level design
+    if is_kami:
+        beauty_border = "✧ ═══ ✧ ═══ ✧ ═══ ✧ ═══ ✧"
+        profile_header = "✨ <b>DIVINE PROFILE</b> ✨"
+        status_info = "💫 <i>Divine Status Active</i> 💫"
+    else:
+        beauty_border = "══════════════════"
+        if total_stages >= 20: beauty_border = "💎💎💎💎💎💎💎💎💎💎💎"
+        elif total_stages >= 15: beauty_border = "✨✨✨✨✨✨✨✨✨✨✨"
+        elif total_stages >= 10: beauty_border = "💠💠💠💠💠💠💠💠💠💠💠"
+        elif total_stages >= 5: beauty_border = "🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹"
+        profile_header = "👤 <b>PLAYER PROFILE</b>"
+        status_info = ""
+
+    profile_text = f"{beauty_border}\n"
+    profile_text += f"{profile_header}\n"
+    profile_text += f"{beauty_border}\n\n"
     
     profile_text += f"<b>NAME:</b> {target_username}\n"
     if active_title and active_title in TITLES:
-        profile_text += f"<b>TITLE:</b> {TITLES[active_title]['display']}\n\n"
+        stage = unlocked_stages.get(active_title, 1)
+        stage_data = STAGES.get(stage, STAGES[1])
+        profile_text += f"<b>TITLE:</b> {stage_data['color']} {TITLES[active_title]['display']} {stage_data['display']}\n\n"
     elif target_user_id == BOT_OWNER_ID:
-        profile_text += f"<b>TITLE:</b> {TITLES['kami']['display']}\n\n"
+        profile_text += f"<b>TITLE:</b> {TITLES['kami']['display']}\n"
+        if status_info: profile_text += f"{status_info}\n"
+        profile_text += "\n"
     else:
         profile_text += f"<b>TITLE:</b> 🔒 Locked\n\n"
     
@@ -1964,38 +1983,18 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"└ 📈 Avg Length: {stats[8]:.1f}\n\n"
     
     # Achievements section
-    profile_text += f"<b>🏆 ACHIEVEMENTS</b>\n"
-    
-    unlocked = db.get_unlocked_titles(target_user_id)
-    
-    # Filter and format achievement list
-    achievement_list = []
-    unlocked_stages = {}
-    for entry in unlocked:
-        if ':' in entry:
-            try:
-                k, s = entry.split(':')
-                unlocked_stages[k] = int(s)
-                if k in TITLES:
-                    stage_suffix = STAGES.get(int(s), STAGES[1])['display']
-                    achievement_list.append(f"{TITLES[k]['display']} {stage_suffix}")
-            except: continue
-        elif entry in TITLES: # Legacy support
-            achievement_list.append(TITLES[entry]['display'])
-
-    if target_user_id == BOT_OWNER_ID:
-        achievement_list.insert(0, TITLES['kami']['display'])
-    
-    if achievement_list:
-        for i, achievement in enumerate(achievement_list):
-            if i == len(achievement_list) - 1:
-                profile_text += f"└ {achievement}\n"
-            else:
-                profile_text += f"├ {achievement}\n"
+    if not is_kami:
+        profile_text += f"<b>🏆 MASTERY LEVELS</b>\n"
+        for t_key, t_data in TITLES.items():
+            if t_data.get('exclusive'): continue
+            stage = unlocked_stages.get(t_key, 0)
+            bar = "▰" * stage + "▱" * (5 - stage)
+            profile_text += f"{t_data['display'][:2]} {bar} ({stage}/5)\n"
     else:
-        profile_text += "└ 🔒 None yet\n"
+        profile_text += f"<b>🌌 CELESTIAL MASTERY</b>\n"
+        profile_text += f"<i>All knowledge and power is yours.</i>\n"
     
-    profile_text += f"\n└─ <b>PLAYER CARD</b> {border_char} ─┘"
+    profile_text += f"\n{beauty_border}"
     
     try:
         profile_photos = await context.bot.get_user_profile_photos(target_user_id, limit=1)
