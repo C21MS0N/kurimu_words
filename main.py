@@ -1930,6 +1930,19 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ No stats found for this player!")
         return
     
+    unlocked_list = db.get_unlocked_titles(target_user_id)
+    unlocked_stages = {}
+    total_stages = 0
+    for entry in unlocked_list:
+        if ':' in entry:
+            try:
+                k, s = entry.split(':')
+                val = int(s)
+                unlocked_stages[k] = val
+                total_stages += val
+            except (ValueError, IndexError):
+                continue
+    
     # Determine active title and Divine status
     active_key = db.get_active_title(target_user_id)
     title_display = ""
