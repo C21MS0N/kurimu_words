@@ -1966,14 +1966,8 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"{beauty_border}\n\n"
     
     profile_text += f"<b>NAME:</b> {target_username}\n"
-    if active_title and active_title in TITLES:
-        stage = unlocked_stages.get(active_title, 1)
-        stage_data = STAGES.get(stage, STAGES[1])
-        profile_text += f"<b>TITLE:</b> {stage_data['color']} {TITLES[active_title]['display']} {stage_data['display']}\n\n"
-    elif target_user_id == BOT_OWNER_ID:
-        profile_text += f"<b>TITLE:</b> {TITLES['kami']['display']}\n"
-        if status_info: profile_text += f"{status_info}\n"
-        profile_text += "\n"
+    if title_display:
+        profile_text += f"<b>TITLE:</b> {title_display}\n\n"
     else:
         profile_text += f"<b>TITLE:</b> 🔒 Locked\n\n"
     
