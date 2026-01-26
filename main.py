@@ -1636,28 +1636,30 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stage_data = STAGES.get(stage, STAGES[1])
             title_display = f"{stage_data['color']} <b>{TITLES[active_key]['display']} {stage_data['display']}</b>"
     
-    # Aesthetic redesign
+    # Scale border aesthetics with total stages
     if is_kami:
         beauty_border = "✦ . ✦ . ✦ . ✦ . ✦ . ✦ . ✦"
         profile_header = "🌌 <b>𝐂𝐄𝐋𝐄𝐒𝐓𝐈𝐀𝐋 𝐄𝐍𝐓𝐈𝐓𝐘</b> 🌌"
         stats_header = "✧ <b>𝐃𝐈𝐕𝐈𝐍𝐄 𝐄𝐒𝐒𝐄𝐍𝐂𝐄</b> ✧"
+    elif total_stages >= 20:
+        beauty_border = "💠 ═══ 💠 ═══ 💠 ═══ 💠"
+        profile_header = "👑 <b>𝐄𝐋𝐈𝐓𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 👑"
+        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
+    elif total_stages >= 15:
+        beauty_border = "✨ ═══ ✨ ═══ ✨ ═══ ✨"
+        profile_header = "💎 <b>𝐌𝐀𝐒𝐓𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 💎"
+        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
+    elif total_stages >= 10:
+        beauty_border = "🔶 ═══ 🔶 ═══ 🔶 ═══ 🔶"
+        profile_header = "⚔️ <b>𝐖𝐀𝐑𝐑𝐈𝐎𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ⚔️"
+        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
+    elif total_stages >= 5:
+        beauty_border = "🔹 ═══ 🔹 ═══ 🔹 ═══ 🔹"
+        profile_header = "🛡️ <b>𝐀𝐃𝐕𝐄𝐍𝐓𝐔𝐑𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 🛡️"
+        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
     else:
-        # Scale border aesthetics with total stages
-        if total_stages >= 20:
-            beauty_border = "💠 ═══ 💠 ═══ 💠 ═══ 💠"
-            profile_header = "👑 <b>𝐄𝐋𝐈𝐓𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 👑"
-        elif total_stages >= 15:
-            beauty_border = "✨ ═══ ✨ ═══ ✨ ═══ ✨"
-            profile_header = "💎 <b>𝐌𝐀𝐒𝐓𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 💎"
-        elif total_stages >= 10:
-            beauty_border = "🔶 ═══ 🔶 ═══ 🔶 ═══ 🔶"
-            profile_header = "⚔️ <b>𝐖𝐀𝐑𝐑𝐈𝐎𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ⚔️"
-        elif total_stages >= 5:
-            beauty_border = "🔹 ═══ 🔹 ═══ 🔹 ═══ 🔹"
-            profile_header = "🛡️ <b>𝐀𝐃𝐕𝐄𝐍𝐓𝐔𝐑𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 🛡️"
-        else:
-            beauty_border = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
-            profile_header = "👤 <b>𝐏𝐋𝐀𝐘𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b>"
+        beauty_border = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
+        profile_header = "👤 <b>𝐏𝐋𝐀𝐘𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b>"
         stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
 
     text = f"{beauty_border}\n"
