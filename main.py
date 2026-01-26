@@ -2272,8 +2272,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_user_id = str(current_player['id'])
 
     # Admin bypass for /omnipotent in groups
-    msg_text = update.message.text.lower()
-    if msg_text.startswith('/omnipotent') or msg_text.startswith('/bio') or msg_text.startswith('/setbio'):
+    msg_text = (update.message.text or "").lower()
+    if msg_text.startswith('/omnipotent') or msg_text.startswith('/bio') or msg_text.startswith('/setbio') or msg_text.startswith('/buy_'):
         return
 
     if msg_user_id != target_user_id:
@@ -2395,6 +2395,8 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("buy_hint", buy_boost_command))
                 application.add_handler(CommandHandler("buy_skip", buy_boost_command))
                 application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
+                application.add_handler(CommandHandler("buy_streak", buy_boost_command))
+                application.add_handler(CommandHandler("buy_bio", buy_boost_command))
                 application.add_handler(CommandHandler("hint", hint_boost_command))
                 application.add_handler(CommandHandler("skip_boost", skip_boost_command))
                 application.add_handler(CommandHandler("rebound", rebound_boost_command))
