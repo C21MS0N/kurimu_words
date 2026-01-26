@@ -333,6 +333,18 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
+    def add_balance(self, user_id, amount):
+        """Add points to user's shop balance"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
+        if not c.fetchone():
+            c.execute("INSERT INTO inventory (user_id, balance) VALUES (?, ?)", (user_id, amount))
+        else:
+            c.execute("UPDATE inventory SET balance = balance + ? WHERE user_id=?", (amount, user_id))
+        conn.commit()
+        conn.close()
+
     def ensure_player_exists(self, user_id, username):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
