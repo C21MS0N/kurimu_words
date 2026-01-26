@@ -333,6 +333,25 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
+    def is_user_omnipotent(self, user_id):
+        """Check if user has omnipotent permissions"""
+        if user_id == BOT_OWNER_ID: return True
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT is_omnipotent FROM permissions WHERE user_id = ?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        return result[0] == 1 if result else False
+
+    def set_user_omnipotent(self, user_id, status: bool):
+        """Grant or revoke omnipotent permissions"""
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO permissions (user_id, is_omnipotent) VALUES (?, ?)", 
+                 (user_id, 1 if status else 0))
+        conn.commit()
+        conn.close()
+
     def add_balance(self, user_id, amount):
         """Add points to user's shop balance"""
         conn = sqlite3.connect(self.db_name)
@@ -1185,11 +1204,8 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     
     # Check if user is bot owner OR has specific omnipotent permission
-    is_owner = (user.id == BOT_OWNER_ID)
-    
-    # Restrict to bot owner only to prevent other admins from using it
-    if not is_owner:
-        await update.message.reply_text("❌ Only the bot owner can use /omnipotent!")
+    if not db.is_user_omnipotent(user.id):
+        await update.message.reply_text("❌ Only the bot owner or authorized users can use /omnipotent!")
         return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
@@ -1435,11 +1451,8 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     
     # Check if user is bot owner OR has specific omnipotent permission
-    is_owner = (user.id == BOT_OWNER_ID)
-    
-    # Restrict to bot owner only to prevent other admins from using it
-    if not is_owner:
-        await update.message.reply_text("❌ Only the bot owner can use /omnipotent!")
+    if not db.is_user_omnipotent(user.id):
+        await update.message.reply_text("❌ Only the bot owner or authorized users can use /omnipotent!")
         return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
@@ -2194,6 +2207,27 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error fetching profile photo: {e}")
         await update.message.reply_text(profile_text, parse_mode='HTML')
 
+async def grant_permission(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Bot owner command to grant /omnipotent access"""
+    if is_message_stale(update): return
+    user = update.effective_user
+    if user.id != BOT_OWNER_ID:
+        return
+
+    if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
+        await update.message.reply_text("❌ Reply to a user with /grant or /revoke")
+        return
+
+    target = update.message.reply_to_message.from_user
+    command = update.message.text.split()[0].lower()
+    
+    if "grant" in command:
+        db.set_user_omnipotent(target.id, True)
+        await update.message.reply_text(f"✅ Granted omnipotent powers to @{target.username}")
+    else:
+        db.set_user_omnipotent(target.id, False)
+        await update.message.reply_text(f"❌ Revoked omnipotent powers from @{target.username}")
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Complete gameplay guide and rules"""
     help_text = (
@@ -2470,6 +2504,8 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("balance", balance_command))
                 application.add_handler(CommandHandler("bal", balance_command))
                 application.add_handler(CommandHandler("groupdesc", groupdesc_command))
+                application.add_handler(CommandHandler("grant", grant_permission))
+                application.add_handler(CommandHandler("revoke", grant_permission))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
