@@ -2147,9 +2147,29 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         profile_text += f"🏆 <b>MASTERY LEVELS</b>\n"
         for t_key, t_data in TITLES.items():
             if t_data.get('exclusive'): continue
+            
             stage = unlocked_stages.get(t_key, 0)
+            
+            # Progress tracking (X/Y)
+            if stage < 5:
+                next_stage = stage + 1
+                req_val = int(t_data['base_req'] * STAGES[next_stage]['multiplier'])
+                
+                # Get current stat value for comparison
+                player_stats = db.get_player_stats(target_user_id)
+                current_val = 0
+                if t_key == 'legend': current_val = player_stats[7] # total_score
+                elif t_key == 'warrior': current_val = player_stats[6] # best_streak
+                elif t_key == 'sage': current_val = player_stats[2] # total_words
+                elif t_key == 'phoenix': current_val = player_stats[3] # games_played
+                elif t_key == 'shadow': current_val = player_stats[5] # longest_word
+                
+                progress_str = f"({current_val}/{req_val})"
+            else:
+                progress_str = "(MAX)"
+                
             bar = "▰" * stage + "▱" * (5 - stage)
-            profile_text += f"{t_data['display'][:2]} {bar} ({stage}/5)\n"
+            profile_text += f"{t_data['display'][:2]} {bar} {progress_str}\n"
     else:
         profile_text += f"🌌 <b>CELESTIAL MASTERY</b>\n"
         profile_text += f"<i>All knowledge and power is yours.</i>\n"
