@@ -2081,14 +2081,14 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if active_key in TITLES:
         if TITLES[active_key].get('exclusive'):
-            title_display = f"✨ <b>{TITLES[active_key]['display']}</b> ✨"
+            title_display = f"<b>{TITLES[active_key]['display']}</b> ✨"
             is_kami = True
         else:
             stage = unlocked_stages.get(active_key, 1)
             stage_data = STAGES.get(stage, STAGES[1])
             title_display = f"{stage_data['color']} <b>{TITLES[active_key]['display']} {stage_data['display']}</b>"
     elif target_user_id == BOT_OWNER_ID:
-        title_display = f"✨ <b>{TITLES['kami']['display']}</b> ✨"
+        title_display = f"<b>{TITLES['kami']['display']}</b> ✨"
         is_kami = True
 
     # Aesthetic redesign
