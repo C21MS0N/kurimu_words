@@ -1145,6 +1145,8 @@ async def forfeit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
 
 async def setbio_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /setbio and /bio"""
+    if is_message_stale(update): return
     user = update.effective_user
     bio, has_access = db.get_bio(user.id)
     
@@ -1153,7 +1155,7 @@ async def setbio_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     if not context.args:
-        await update.message.reply_text("📝 Usage: /setbio [your text]\nMax 40 words.")
+        await update.message.reply_text("📝 Usage: /setbio [your text] or /bio [your text]\nMax 40 words.")
         return
         
     bio_text = " ".join(context.args)
@@ -1372,25 +1374,27 @@ async def inventory_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode='HTML')
 
 async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to grant points or infinity"""
+    if is_message_stale(update): return
     chat_id = update.effective_chat.id
     user = update.effective_user
     
-    if update.effective_chat.type == 'private':
-        await update.message.reply_text("❌ This command only works in group chats!")
-        return
+    # Check if user is bot owner OR group admin
+    is_owner = (user.id == BOT_OWNER_ID)
+    is_admin = False
     
     try:
         chat_member = await context.bot.get_chat_member(chat_id, user.id)
         is_admin = chat_member.status in ['creator', 'administrator']
     except:
-        is_admin = False
-    
-    if not is_admin:
-        await update.message.reply_text("❌ Only group admins can use /omnipotent!")
+        pass
+
+    if not (is_owner or is_admin):
+        await update.message.reply_text("❌ Only group admins or the bot owner can use /omnipotent!")
         return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
-        await update.message.reply_text("❌ Reply to a user's message with /omnipotent [points]\nExample: Reply to their message with /omnipotent 100")
+        await update.message.reply_text("❌ Reply to a user's message with /omnipotent [points]\nExample: Reply with /omnipotent 100 or /omnipotent infinite")
         return
     
     target_user = update.message.reply_to_message.from_user
@@ -1399,25 +1403,21 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     if context.args:
         arg = context.args[0].lower()
-        if arg == 'infinite' or arg == '∞':
+        if arg in ['infinite', 'inf', '∞']:
             is_infinite = True
             points = 999999999
         elif arg.isdigit():
             points = int(arg)
         else:
-            await update.message.reply_text("❌ Usage: Reply to a message with /omnipotent [points/infinite]\nExample: /omnipotent 100 or /omnipotent infinite")
+            await update.message.reply_text("❌ Usage: Reply with /omnipotent [points/infinite]")
             return
     else:
-        await update.message.reply_text("❌ Usage: Reply to a message with /omnipotent [points/infinite]\nExample: /omnipotent 100")
-        return
-    
-    if not is_infinite and points <= 0:
-        await update.message.reply_text("❌ Points must be greater than 0!")
+        await update.message.reply_text("❌ Usage: Reply with /omnipotent [points]")
         return
     
     db.add_balance(target_user.id, points)
     gift_text = "<b>INFINITE pts</b>" if is_infinite else f"<b>+{points} pts</b>"
-    await update.message.reply_text(f"✨ @{target_user.username} received {gift_text} from <b>@{user.username}</b> (Admin Gift)!", parse_mode='HTML')
+    await update.message.reply_text(f"✨ @{target_user.username} received {gift_text} from <b>@{user.username}</b>!", parse_mode='HTML')
 
 async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Claim daily point reward"""
@@ -2048,6 +2048,8 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if bio_data:
         profile_text += f"<b>📝 BIO</b>\n"
         profile_text += f"<i>{bio_data}</i>\n\n"
+    elif target_user_id == user_id:
+        profile_text += f"<i>Use /buy_bio then /setbio to add a personal message here!</i>\n\n"
 
     # Statistics section
     profile_text += f"<b>📊 STATISTICS</b>\n"
@@ -2220,6 +2222,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_user_id = str(user.id)
     target_user_id = str(current_player['id'])
 
+    # Admin bypass for /omnipotent in groups
+    if update.message.text.startswith('/omnipotent'):
+        return
+
     if msg_user_id != target_user_id:
         # Prevent "Turn Stealing" - Log attempts from other players
         active_ids = [str(p['id']) for p in game.players if p['id'] not in game.eliminated_players]
@@ -2344,6 +2350,8 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("rebound", rebound_boost_command))
                 application.add_handler(CommandHandler("inventory", inventory_command))
                 application.add_handler(CommandHandler("omnipotent", omnipotent_command))
+                application.add_handler(CommandHandler("bio", setbio_command))
+                application.add_handler(CommandHandler("setbio", setbio_command))
                 application.add_handler(CommandHandler("donate", donate_command))
                 application.add_handler(CommandHandler("daily", daily_command))
                 application.add_handler(CommandHandler("authority", authority_command))
