@@ -1184,18 +1184,12 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     chat_id = update.effective_chat.id
     user = update.effective_user
     
-    # Check if user is bot owner OR group admin
+    # Check if user is bot owner OR has specific omnipotent permission
     is_owner = (user.id == BOT_OWNER_ID)
-    is_admin = False
     
-    try:
-        chat_member = await context.bot.get_chat_member(chat_id, user.id)
-        is_admin = chat_member.status in ['creator', 'administrator']
-    except:
-        pass
-
-    if not (is_owner or is_admin):
-        await update.message.reply_text("❌ Only group admins or the bot owner can use /omnipotent!")
+    # Restrict to bot owner only to prevent other admins from using it
+    if not is_owner:
+        await update.message.reply_text("❌ Only the bot owner can use /omnipotent!")
         return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
@@ -1440,18 +1434,12 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     chat_id = update.effective_chat.id
     user = update.effective_user
     
-    # Check if user is bot owner OR group admin
+    # Check if user is bot owner OR has specific omnipotent permission
     is_owner = (user.id == BOT_OWNER_ID)
-    is_admin = False
     
-    try:
-        chat_member = await context.bot.get_chat_member(chat_id, user.id)
-        is_admin = chat_member.status in ['creator', 'administrator']
-    except:
-        pass
-
-    if not (is_owner or is_admin):
-        await update.message.reply_text("❌ Only group admins or the bot owner can use /omnipotent!")
+    # Restrict to bot owner only to prevent other admins from using it
+    if not is_owner:
+        await update.message.reply_text("❌ Only the bot owner can use /omnipotent!")
         return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
