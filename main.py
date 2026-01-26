@@ -1636,44 +1636,65 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stage_data = STAGES.get(stage, STAGES[1])
             title_display = f"{stage_data['color']} <b>{TITLES[active_key]['display']} {stage_data['display']}</b>"
     
-    # Beauty level design
+    # Aesthetic redesign
     if is_kami:
-        beauty_border = "✧ ════════════════ ✧"
-        profile_header = "💠 <b>DIVINE PROFILE</b> 💠"
+        beauty_border = "✦ . ✦ . ✦ . ✦ . ✦ . ✦ . ✦"
+        profile_header = "🌌 <b>𝐂𝐄𝐋𝐄𝐒𝐓𝐈𝐀𝐋 𝐄𝐍𝐓𝐈𝐓𝐘</b> 🌌"
+        stats_header = "✧ <b>𝐃𝐈𝐕𝐈𝐍𝐄 𝐄𝐒𝐒𝐄𝐍𝐂𝐄</b> ✧"
     else:
-        beauty_border = "════════════════"
-        if total_stages >= 20: beauty_border = "✨✨✨✨✨✨✨✨✨✨✨"
-        elif total_stages >= 15: beauty_border = "💠💠💠💠💠💠💠💠💠💠💠"
-        elif total_stages >= 10: beauty_border = "🔶🔶🔶🔶🔶🔶🔶🔶🔶🔶🔶"
-        elif total_stages >= 5: beauty_border = "🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹"
-        profile_header = "👤 <b>PLAYER PROFILE</b>"
+        # Scale border aesthetics with total stages
+        if total_stages >= 20:
+            beauty_border = "💠 ═══ 💠 ═══ 💠 ═══ 💠"
+            profile_header = "👑 <b>𝐄𝐋𝐈𝐓𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 👑"
+        elif total_stages >= 15:
+            beauty_border = "✨ ═══ ✨ ═══ ✨ ═══ ✨"
+            profile_header = "💎 <b>𝐌𝐀𝐒𝐓𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 💎"
+        elif total_stages >= 10:
+            beauty_border = "🔶 ═══ 🔶 ═══ 🔶 ═══ 🔶"
+            profile_header = "⚔️ <b>𝐖𝐀𝐑𝐑𝐈𝐎𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ⚔️"
+        elif total_stages >= 5:
+            beauty_border = "🔹 ═══ 🔹 ═══ 🔹 ═══ 🔹"
+            profile_header = "🛡️ <b>𝐀𝐃𝐕𝐄𝐍𝐓𝐔𝐑𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 🛡️"
+        else:
+            beauty_border = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
+            profile_header = "👤 <b>𝐏𝐋𝐀𝐘𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b>"
+        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
 
     text = f"{beauty_border}\n"
     text += f"{profile_header}\n"
     text += f"{beauty_border}\n\n"
     
-    text += f"<b>Name:</b> {target_user.first_name}\n"
+    text += f"👤 <b>𝐍𝐚𝐦𝐞:</b> <code>{target_user.first_name}</code>\n"
     if title_display:
-        text += f"<b>Title:</b> {title_display}\n"
-    text += f"<b>Balance:</b> 💰 {db.get_balance(target_user.id)} pts\n\n"
+        text += f"🎖️ <b>𝐓𝐢𝐭𝐥𝐞:</b> {title_display}\n"
+    text += f"💰 <b>𝐁𝐚𝐥𝐚𝐧𝐜𝐞:</b> <code>{db.get_balance(target_user.id)}</code> pts\n\n"
     
-    text += f"📊 <b>GAME STATISTICS</b>\n"
-    text += f"• Score: <code>{stats[7]}</code>\n"
-    text += f"• Words: <code>{stats[2]}</code>\n"
-    text += f"• Streak: <code>{stats[6]}</code>\n"
-    text += f"• Longest: <code>{stats[5]}</code>\n"
-    text += f"• Games: <code>{stats[3]}</code>\n\n"
+    # Bio section (Enhanced display)
+    bio_data, _ = db.get_bio(target_user.id)
+    if bio_data:
+        text += f"📜 <b>𝐁𝐢𝐨:</b>\n<i>« {bio_data} »</i>\n\n"
+    elif str(target_user.id) == str(user.id):
+        text += f"💡 <i>Tip: Use /buy_bio to add a personal message!</i>\n\n"
+    
+    text += f"{stats_header}\n"
+    text += f"┣ 𝐒𝐜𝐨𝐫𝐞: <code>{stats[7]}</code>\n"
+    text += f"┣ 𝐖𝐨𝐫𝐝𝐬: <code>{stats[2]}</code>\n"
+    text += f"┣ 𝐒𝐭𝐫𝐞𝐚𝐤: <code>{stats[6]}</code>\n"
+    text += f"┣ 𝐋𝐨𝐧𝐠𝐞𝐬𝐭: <code>{stats[5]}</code>\n"
+    text += f"┗ 𝐆𝐚𝐦𝐞𝐬: <code>{stats[3]}</code>\n\n"
     
     if not is_kami:
-        text += f"🏆 <b>MASTERY LEVELS</b>\n"
+        text += f"🏆 <b>𝐌𝐀𝐒𝐓𝐄𝐑𝐘 𝐏𝐑𝐎𝐆𝐑𝐄𝐒𝐒</b>\n"
         for t_key, t_data in TITLES.items():
             if t_data.get('exclusive'): continue
             stage = unlocked_stages.get(t_key, 0)
-            bar = "▰" * stage + "▱" * (5 - stage)
-            text += f"{t_data['display'][:2]} {bar} ({stage}/5)\n"
+            # Use cleaner progress blocks
+            filled = "⬛" * stage
+            empty = "⬜" * (5 - stage)
+            text += f"{t_data['display'].split()[0]} {filled}{empty} ({stage}/5)\n"
     else:
-        text += f"✨ <b>DIVINE STATUS ACTIVE</b> ✨\n"
-        text += f"<i>Official Android 18 gooner.</i>\n"
+        text += f"🌟 <b>𝐒𝐔𝐏𝐑𝐄𝐌𝐄 𝐀𝐔𝐓𝐇𝐎𝐑𝐈𝐓𝐘</b> 🌟\n"
+        text += f"<i>Absolute ruler of the word domain.</i>\n"
     
     text += f"\n{beauty_border}"
     
