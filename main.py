@@ -2139,6 +2139,9 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"┣ 🎮 Games: {stats[3]}\n"
     profile_text += f"┣ 📏 Longest: {stats[4]} ({stats[5]} letters)\n"
     profile_text += f"┗ 📈 Avg Length: {stats[8]:.1f}\n\n"
+
+    # Auto-unlock titles on every profile view to ensure progress is tracked
+    db.auto_unlock_titles(target_user_id)
     
     if not is_kami:
         profile_text += f"🏆 <b>MASTERY LEVELS</b>\n"
