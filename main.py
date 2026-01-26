@@ -1166,6 +1166,52 @@ async def setbio_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.set_bio(user.id, bio_text)
     await update.message.reply_text("✅ Bio updated! To change it again, you'll need to buy another Bio Access.")
 
+async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to grant points or infinity"""
+    if is_message_stale(update): return
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    # Check if user is bot owner OR group admin
+    is_owner = (user.id == BOT_OWNER_ID)
+    is_admin = False
+    
+    try:
+        chat_member = await context.bot.get_chat_member(chat_id, user.id)
+        is_admin = chat_member.status in ['creator', 'administrator']
+    except:
+        pass
+
+    if not (is_owner or is_admin):
+        await update.message.reply_text("❌ Only group admins or the bot owner can use /omnipotent!")
+        return
+    
+    if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
+        await update.message.reply_text("❌ Reply to a user's message with /omnipotent [points]\nExample: Reply with /omnipotent 100 or /omnipotent infinite")
+        return
+    
+    target_user = update.message.reply_to_message.from_user
+    points = 0
+    is_infinite = False
+    
+    if context.args:
+        arg = context.args[0].lower()
+        if arg in ['infinite', 'inf', '∞']:
+            is_infinite = True
+            points = 999999999
+        elif arg.isdigit():
+            points = int(arg)
+        else:
+            await update.message.reply_text("❌ Usage: Reply with /omnipotent [points/infinite]")
+            return
+    else:
+        await update.message.reply_text("❌ Usage: Reply with /omnipotent [points]")
+        return
+    
+    db.add_balance(target_user.id, points)
+    gift_text = "<b>INFINITE pts</b>" if is_infinite else f"<b>+{points} pts</b>"
+    await update.message.reply_text(f"✨ @{target_user.username} received {gift_text} from <b>@{user.username}</b>!", parse_mode='HTML')
+
 async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
@@ -1185,9 +1231,12 @@ async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for boost_type, details in SHOP_BOOSTS.items():
         owned = inventory[boost_type]
         text += f"{details['description']}\n💵 Price: <b>{details['price']} pts</b> - Owned: <b>{owned}</b>\n/buy_{boost_type}\n\n"
+    
+    text += "<b>🖋️ PERSONAL BIO</b>\n"
+    text += "└ 🏷️ Price: <code>500</code> pts | /buy_bio\n"
+    text += "<i>Set a custom message on your profile (Max 40 words). Access consumed on use.</i>\n\n"
     text += "Example: /buy_hint to purchase hint boost"
     await update.message.reply_text(text, parse_mode='HTML')
-
 async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
@@ -1215,7 +1264,7 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price = 500 if boost_type == 'bio' else SHOP_BOOSTS[boost_type]['price']
     if db.buy_boost(user.id, boost_type, price):
         if boost_type == 'bio':
-            await update.message.reply_text("✅ <b>Bio Access Purchased!</b>\n\nUse /setbio [text] to set your custom profile message (Max 40 words).", parse_mode='HTML')
+            await update.message.reply_text("✅ <b>Bio Access Purchased!</b>\n\nUse /bio [text] to set your custom profile message (Max 40 words).", parse_mode='HTML')
         else:
             await update.message.reply_text(f"✅ Purchased {boost_type}! (-{price} pts)")
     else:
@@ -2048,8 +2097,8 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if bio_data:
         profile_text += f"<b>📝 BIO</b>\n"
         profile_text += f"<i>{bio_data}</i>\n\n"
-    elif target_user_id == user_id:
-        profile_text += f"<i>Use /buy_bio then /setbio to add a personal message here!</i>\n\n"
+    elif str(target_user_id) == str(user.id):
+        profile_text += f"<i>Use /buy_bio then /bio to add a personal message here!</i>\n\n"
 
     # Statistics section
     profile_text += f"<b>📊 STATISTICS</b>\n"
@@ -2223,7 +2272,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_user_id = str(current_player['id'])
 
     # Admin bypass for /omnipotent in groups
-    if update.message.text.startswith('/omnipotent'):
+    msg_text = update.message.text.lower()
+    if msg_text.startswith('/omnipotent') or msg_text.startswith('/bio') or msg_text.startswith('/setbio'):
         return
 
     if msg_user_id != target_user_id:
