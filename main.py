@@ -2117,7 +2117,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"{profile_header}\n"
     profile_text += f"{beauty_border}\n\n"
     
-    profile_text += f"<b>NAME:</b> 『<code>{target_username}</code>』\n"
+    profile_text += f"<b>NAME:</b> <code>{target_username}</code>\n"
     if title_display:
         profile_text += f"<b>TITLE:</b> {title_display}\n\n"
     else:
