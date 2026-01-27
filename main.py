@@ -1391,7 +1391,7 @@ async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     game.next_turn()
     next_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
-    game.current_turn_user_id = str(next_player['id'])
+    game.current_turn_user_id = next_player['id']
     
     await update.message.reply_text(f"⏭️ @{user.username} used skip boost\\!\n\n👉 @{next_player['username']}'s Turn\nTarget: *exactly {game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
@@ -1424,7 +1424,7 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
     game.next_turn(preserve_challenge=True)
     next_player = game.players[game.current_player_index]
     turn_time = game.get_turn_time()
-    game.current_turn_user_id = str(next_player['id'])
+    game.current_turn_user_id = next_player['id']
     
     await update.message.reply_text(f"🔄 @{user.username} rebounded\\!\n\n👉 @{next_player['username']}'s Turn \\(SAME QUESTION\\)\nTarget: *exactly {game.current_word_length} letters* starting with *'{game.current_start_letter.upper()}'*\n⏱️ *Time: {turn_time}s*", parse_mode='MarkdownV2')
     game.timeout_task = asyncio.create_task(handle_turn_timeout(chat_id, next_player['id'], context.application))
@@ -1972,6 +1972,7 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_kami = True
     
     if is_kami:
+        # Check if kami_balance_compressed.jpg exists, otherwise use original or try to compress
         image_path = "attached_assets/Picsart_25-12-25_07-48-43-245_1766820109612.png"
         compressed_path = "attached_assets/kami_balance_compressed.jpg"
         
@@ -1983,23 +1984,21 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         try:
-            # Compress image if not already compressed
-            if not os.path.exists(compressed_path):
-                with Image.open(image_path) as img:
-                    if img.mode in ("RGBA", "P"):
-                        img = img.convert("RGB")
-                    # Reduce size significantly to stay under Telegram's limits
-                    img.thumbnail((1024, 1024))
-                    img.save(compressed_path, "JPEG", quality=70, optimize=True)
+            # Check if file exists before trying to open it
+            final_path = compressed_path if os.path.exists(compressed_path) else image_path
             
-            with open(compressed_path, 'rb') as photo_file:
-                await update.message.reply_photo(
-                    photo=photo_file,
-                    caption=caption,
-                    parse_mode='HTML'
-                )
+            if os.path.exists(final_path):
+                with open(final_path, 'rb') as photo_file:
+                    await update.message.reply_photo(
+                        photo=photo_file,
+                        caption=caption,
+                        parse_mode='HTML'
+                    )
+            else:
+                # Fallback to text if image is missing
+                await update.message.reply_text(caption, parse_mode='HTML')
         except Exception as e:
-            logger.error(f"Error sending compressed kami balance: {e}")
+            logger.error(f"Error sending kami balance image: {e}")
             await update.message.reply_text(caption, parse_mode='HTML')
     else:
         await update.message.reply_text(
