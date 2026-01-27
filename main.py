@@ -119,23 +119,35 @@ class DatabaseManager:
                 average_word_length REAL DEFAULT 0.0
             )
         ''')
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS inventory (
-                user_id INTEGER PRIMARY KEY,
-                hint_count INTEGER DEFAULT 0,
-                skip_count INTEGER DEFAULT 0,
-                rebound_count INTEGER DEFAULT 0,
-                streak_protect INTEGER DEFAULT 0,
-                balance INTEGER DEFAULT 0,
-                bal_photo_count INTEGER DEFAULT 0
-            )
-        ''')
-        
-        # Migration for existing inventory table
-        try:
-            c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
+    # Create inventory table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS inventory (
+            user_id INTEGER PRIMARY KEY,
+            hint_count INTEGER DEFAULT 0,
+            skip_count INTEGER DEFAULT 0,
+            rebound_count INTEGER DEFAULT 0,
+            streak_protect INTEGER DEFAULT 0,
+            balance INTEGER DEFAULT 0,
+            bal_photo_count INTEGER DEFAULT 0
+        )
+    ''')
+    
+    # Migration for existing inventory table
+    try:
+        c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+
+    # Force update NULLs to 0 to prevent "None" errors
+    try:
+        c.execute("UPDATE inventory SET bal_photo_count = 0 WHERE bal_photo_count IS NULL")
+        c.execute("UPDATE inventory SET hint_count = 0 WHERE hint_count IS NULL")
+        c.execute("UPDATE inventory SET skip_count = 0 WHERE skip_count IS NULL")
+        c.execute("UPDATE inventory SET rebound_count = 0 WHERE rebound_count IS NULL")
+        c.execute("UPDATE inventory SET streak_protect = 0 WHERE streak_protect IS NULL")
+        c.execute("UPDATE inventory SET balance = 0 WHERE balance IS NULL")
+    except sqlite3.OperationalError:
+        pass
             
         try:
             c.execute("ALTER TABLE leaderboard ADD COLUMN last_daily TEXT")
@@ -448,13 +460,13 @@ class DatabaseManager:
         conn.close()
         if result: 
             return {
-                'hint': result[0], 
-                'skip': result[1], 
-                'rebound': result[2],
-                'balance': result[3],
-                'streak': result[4],
-                'streak_protect': result[4],
-                'bal_photo': result[5] if len(result) > 5 else 0
+                'hint': result[0] or 0, 
+                'skip': result[1] or 0, 
+                'rebound': result[2] or 0,
+                'balance': result[3] or 0,
+                'streak': result[4] or 0,
+                'streak_protect': result[4] or 0,
+                'bal_photo': result[5] or 0
             }
         return {'hint': 0, 'skip': 0, 'rebound': 0, 'streak': 0, 'streak_protect': 0, 'bal_photo': 0, 'balance': 0}
     
@@ -1314,14 +1326,6 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if boost_type == 'bio':
             await update.message.reply_text("✅ <b>Bio Access Purchased!</b>\n\nUse /bio [text] to set your custom profile message (Max 40 words).", parse_mode='HTML')
         elif boost_type == 'bal_photo':
-            # Create the necessary entry in titles if it doesn't exist
-            conn = sqlite3.connect(db.db_name)
-            c = conn.cursor()
-            c.execute("SELECT * FROM titles WHERE user_id=?", (user.id,))
-            if not c.fetchone():
-                c.execute("INSERT INTO titles (user_id, has_bio_access) VALUES (?, 0)", (user.id,))
-                conn.commit()
-            conn.close()
             await update.message.reply_text("✅ <b>Custom Balance Photo Access Purchased!</b>\n\nTo set your photo, reply to any image with <code>/setbalpic</code>.", parse_mode='HTML')
         else:
             await update.message.reply_text(f"✅ Purchased {boost_type}! (-{price} pts)")
