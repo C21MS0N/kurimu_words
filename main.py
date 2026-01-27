@@ -119,24 +119,23 @@ class DatabaseManager:
                 average_word_length REAL DEFAULT 0.0
             )
         ''')
-    # Create inventory table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS inventory (
-            user_id INTEGER PRIMARY KEY,
-            hint_count INTEGER DEFAULT 0,
-            skip_count INTEGER DEFAULT 0,
-            rebound_count INTEGER DEFAULT 0,
-            streak_protect INTEGER DEFAULT 0,
-            balance INTEGER DEFAULT 0,
-            bal_photo_count INTEGER DEFAULT 0
-        )
-    ''')
-    
-    # Migration for existing inventory table
-    try:
-        c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS inventory (
+                user_id INTEGER PRIMARY KEY,
+                hint_count INTEGER DEFAULT 0,
+                skip_count INTEGER DEFAULT 0,
+                rebound_count INTEGER DEFAULT 0,
+                streak_protect INTEGER DEFAULT 0,
+                balance INTEGER DEFAULT 0,
+                bal_photo_count INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # Migration for existing inventory table
+        try:
+            c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
             
         try:
             c.execute("ALTER TABLE leaderboard ADD COLUMN last_daily TEXT")
