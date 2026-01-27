@@ -2389,20 +2389,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_id not in games or not update.message or not update.message.text: return
 
     game = games[chat_id]
+    user = update.effective_user
+    msg_text = (update.message.text or "").lower()
+
+    # Admin bypass for commands that should always work
+    if msg_text.startswith(('/omnipotent', '/bio', '/setbio', '/buy_', '/bal', '/balance', '/mystats', '/profile', '/leaderboard')):
+        return
+
     if not game.is_running: return
 
     # Turn Validation & Type-Safe ID Check
-    user = update.effective_user
     current_player = game.players[game.current_player_index]
     
     # Normalize IDs to strings for comparison
     msg_user_id = str(user.id)
     target_user_id = str(current_player['id'])
-
-    # Admin bypass for /omnipotent in groups
-    msg_text = (update.message.text or "").lower()
-    if msg_text.startswith('/omnipotent') or msg_text.startswith('/bio') or msg_text.startswith('/setbio') or msg_text.startswith('/buy_'):
-        return
 
     if msg_user_id != target_user_id:
         # Prevent "Turn Stealing" - Log attempts from other players
