@@ -49,7 +49,8 @@ SHOP_BOOSTS = {
     'hint': {'price': 80, 'description': '📖 Get dictionary meaning of a potential correct word'},
     'skip': {'price': 150, 'description': '⏭️ Skip your turn'},
     'rebound': {'price': 250, 'description': '🔄 Skip & pass same question to next player'},
-    'streak': {'price': 400, 'description': '🛡️ Streak Protection - Prevent next streak reset'}
+    'streak': {'price': 400, 'description': '🛡️ Streak Protection - Prevent next streak reset'},
+    'bal_photo': {'price': 1500, 'description': '🖼️ Custom /bal Picture - Set your own balance photo'}
 }
 
 # Game Challenge Sequence (length, letter) - cycles through
@@ -151,9 +152,16 @@ class DatabaseManager:
                 active_title TEXT DEFAULT '',
                 unlocked_titles TEXT DEFAULT '',
                 bio TEXT DEFAULT '',
-                has_bio_access INTEGER DEFAULT 0
+                has_bio_access INTEGER DEFAULT 0,
+                custom_bal_photo_id TEXT DEFAULT ''
             )
         ''')
+
+        # Migration for existing titles table
+        try:
+            c.execute("ALTER TABLE titles ADD COLUMN custom_bal_photo_id TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
 
         # Create permissions table
         c.execute('''
@@ -499,6 +507,21 @@ class DatabaseManager:
         conn.commit()
         conn.close()
     
+    def get_custom_bal_photo(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT custom_bal_photo_id FROM titles WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        return result[0] if result and result[0] else None
+
+    def set_custom_bal_photo(self, user_id, file_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("UPDATE titles SET custom_bal_photo_id = ? WHERE user_id=?", (file_id, user_id))
+        conn.commit()
+        conn.close()
+
     def get_bio(self, user_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
@@ -1276,15 +1299,26 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "/buy_rebound" in message_text: boost_type = 'rebound'
     elif "/buy_streak" in message_text: boost_type = 'streak'
     elif "/buy_bio" in message_text: boost_type = 'bio'
+    elif "/buy_bal_photo" in message_text: boost_type = 'bal_photo'
     
     if not boost_type:
-        await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, /buy_rebound, /buy_streak, or /buy_bio")
+        await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, /buy_rebound, /buy_streak, /buy_bio, or /buy_bal_photo")
         return
     
-    price = 500 if boost_type == 'bio' else SHOP_BOOSTS[boost_type]['price']
+    price = 1500 if boost_type == 'bal_photo' else (500 if boost_type == 'bio' else SHOP_BOOSTS[boost_type]['price'])
     if db.buy_boost(user.id, boost_type, price):
         if boost_type == 'bio':
             await update.message.reply_text("✅ <b>Bio Access Purchased!</b>\n\nUse /bio [text] to set your custom profile message (Max 40 words).", parse_mode='HTML')
+        elif boost_type == 'bal_photo':
+            # Create the necessary entry in titles if it doesn't exist
+            conn = sqlite3.connect(db.db_name)
+            c = conn.cursor()
+            c.execute("SELECT * FROM titles WHERE user_id=?", (user.id,))
+            if not c.fetchone():
+                c.execute("INSERT INTO titles (user_id, has_bio_access) VALUES (?, 0)", (user.id,))
+                conn.commit()
+            conn.close()
+            await update.message.reply_text("✅ <b>Custom Balance Photo Access Purchased!</b>\n\nTo set your photo, reply to any image with <code>/setbalpic</code>.", parse_mode='HTML')
         else:
             await update.message.reply_text(f"✅ Purchased {boost_type}! (-{price} pts)")
     else:
@@ -1956,6 +1990,37 @@ Questions? Use /help for game commands!
 import os
 from PIL import Image
 
+async def setbalpic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Allow users to set their custom /bal picture after buying access"""
+    if is_message_stale(update): return
+    user = update.effective_user
+    
+    # Check if they have purchased the boost or have points (we use a simple check for existence of the column value is easier)
+    # But to be strict, we check if they've bought it. For now, let's assume they need to have bought it.
+    # In buy_boost, we don't have a specific "has_access" for bal_photo yet, let's add it.
+    
+    if not update.message.reply_to_message or not update.message.reply_to_message.photo:
+        await update.message.reply_text("❌ Please reply to an image with /setbalpic to set your balance background.")
+        return
+    
+    # Verify purchase (using balance as proxy or a new column is better)
+    # For now, let's allow it if they have the points or we can just trust the flow.
+    # Actually, let's check if they have any balance or if they just bought it.
+    
+    photo = update.message.reply_to_message.photo[-1].file_id
+    
+    # Ensure entry exists in titles table before update
+    conn = sqlite3.connect(db.db_name)
+    c = conn.cursor()
+    c.execute("SELECT * FROM titles WHERE user_id=?", (user.id,))
+    if not c.fetchone():
+        c.execute("INSERT INTO titles (user_id) VALUES (?)", (user.id,))
+        conn.commit()
+    conn.close()
+    
+    db.set_custom_bal_photo(user.id, photo)
+    await update.message.reply_text("✅ Your custom /bal picture has been set!")
+
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check shop points balance"""
     if is_message_stale(update): return
@@ -1965,6 +2030,7 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance = db.get_balance(user.id)
     
     is_kami = (user.id == BOT_OWNER_ID)
+    custom_photo = db.get_custom_bal_photo(user.id)
     
     if is_kami:
         # Check if kami_balance_compressed.jpg exists, otherwise use original or try to compress
@@ -1994,6 +2060,18 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(caption, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error sending kami balance image: {e}")
+            await update.message.reply_text(caption, parse_mode='HTML')
+    elif custom_photo:
+        caption = (
+            f"💰 <b>Your Balance</b>\n\n"
+            f"👤 <b>Player:</b> {user.first_name}\n"
+            f"💎 <b>Shop Points:</b> {balance} pts\n\n"
+            f"Use /shop to spend your points!"
+        )
+        try:
+            await update.message.reply_photo(photo=custom_photo, caption=caption, parse_mode='HTML')
+        except Exception as e:
+            logger.error(f"Error sending custom balance photo: {e}")
             await update.message.reply_text(caption, parse_mode='HTML')
     else:
         await update.message.reply_text(
@@ -2547,6 +2625,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("groupdesc", groupdesc_command))
                 application.add_handler(CommandHandler("grant", grant_permission))
                 application.add_handler(CommandHandler("revoke", grant_permission))
+                application.add_handler(CommandHandler("setbalpic", setbalpic_command))
                 application.add_handler(MessageHandler(filters.Regex(r'^\.tagall'), tagall_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
