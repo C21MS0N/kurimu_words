@@ -2224,6 +2224,45 @@ async def grant_permission(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.set_user_omnipotent(target.id, False)
         await update.message.reply_text(f"❌ Revoked omnipotent powers from @{target.username}")
 
+async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mention all players from the leaderboard who are in this group"""
+    if is_message_stale(update): return
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    # Check if user is bot owner OR has specific omnipotent permission OR is an admin
+    is_owner = (user.id == BOT_OWNER_ID)
+    is_authorized = db.is_user_omnipotent(user.id)
+    is_admin = False
+    
+    try:
+        chat_member = await context.bot.get_chat_member(chat_id, user.id)
+        is_admin = chat_member.status in ['creator', 'administrator']
+    except:
+        pass
+
+    if not (is_owner or is_authorized or is_admin):
+        await update.message.reply_text("❌ Only the bot owner, authorized users, or admins can use .tagall!")
+        return
+
+    # In a real scenario, getting all members of a group is limited by Telegram API
+    # We will tag all players currently in the leaderboard for this group (if known)
+    # or just use a generic call to action.
+    
+    # Fetch all players from leaderboard to tag them
+    players = db.get_top_players(limit=50) # Get top 50 players as a proxy for active members
+    if not players:
+        await update.message.reply_text("❌ No players found to tag!")
+        return
+        
+    tag_msg = "📢 <b>ATTENTION EVERYONE!</b> 📢\n\n"
+    tag_msg += " ".join([f"@{name}" for name, _ in players])
+    
+    custom_msg = " ".join(context.args) if context.args else "Wake up! A new challenge awaits!"
+    tag_msg += f"\n\n💬 {custom_msg}"
+    
+    await update.message.reply_text(tag_msg, parse_mode='HTML')
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Complete gameplay guide and rules"""
     help_text = (
@@ -2502,6 +2541,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("groupdesc", groupdesc_command))
                 application.add_handler(CommandHandler("grant", grant_permission))
                 application.add_handler(CommandHandler("revoke", grant_permission))
+                application.add_handler(MessageHandler(filters.Regex(r'^\.tagall'), tagall_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
