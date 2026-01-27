@@ -2245,18 +2245,24 @@ async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Only the bot owner, authorized users, or admins can use .tagall!")
         return
 
-    # In a real scenario, getting all members of a group is limited by Telegram API
-    # We will tag all players currently in the leaderboard for this group (if known)
-    # or just use a generic call to action.
+    # In Telegram, bots cannot "get all members" of a group due to privacy/API limits.
+    # The most effective way is to tag all known players from the database.
     
-    # Fetch all players from leaderboard to tag them
-    players = db.get_top_players(limit=50) # Get top 50 players as a proxy for active members
-    if not players:
-        await update.message.reply_text("❌ No players found to tag!")
+    conn = sqlite3.connect(db.db_name)
+    c = conn.cursor()
+    # Get all unique users who have played in this bot
+    c.execute("SELECT username FROM leaderboard WHERE username IS NOT NULL AND username != ''")
+    rows = c.fetchall()
+    conn.close()
+    
+    if not rows:
+        await update.message.reply_text("❌ No players found in database to tag!")
         return
         
     tag_msg = "📢 <b>ATTENTION EVERYONE!</b> 📢\n\n"
-    tag_msg += " ".join([f"@{name}" for name, _ in players])
+    # Filter out empty or invalid usernames and join
+    usernames = [f"@{r[0]}" for r in rows if r[0]]
+    tag_msg += " ".join(usernames)
     
     custom_msg = " ".join(context.args) if context.args else "Wake up! A new challenge awaits!"
     tag_msg += f"\n\n💬 {custom_msg}"
