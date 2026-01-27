@@ -119,26 +119,24 @@ class DatabaseManager:
                 average_word_length REAL DEFAULT 0.0
             )
         ''')
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS inventory (
-                user_id INTEGER PRIMARY KEY,
-                hint_count INTEGER DEFAULT 0,
-                skip_count INTEGER DEFAULT 0,
-                rebound_count INTEGER DEFAULT 0,
-                balance INTEGER DEFAULT 0
-            )
-        ''')
-        
-        # Add balance column if it doesn't exist (migration)
-        try:
-            c.execute("ALTER TABLE inventory ADD COLUMN balance INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-            
-        try:
-            c.execute("ALTER TABLE inventory ADD COLUMN streak_protect INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
+    # Create inventory table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS inventory (
+            user_id INTEGER PRIMARY KEY,
+            hint_count INTEGER DEFAULT 0,
+            skip_count INTEGER DEFAULT 0,
+            rebound_count INTEGER DEFAULT 0,
+            streak_protect INTEGER DEFAULT 0,
+            balance INTEGER DEFAULT 0,
+            bal_photo_count INTEGER DEFAULT 0
+        )
+    ''')
+    
+    # Migration for existing inventory table
+    try:
+        c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
             
         try:
             c.execute("ALTER TABLE leaderboard ADD COLUMN last_daily TEXT")
@@ -446,55 +444,54 @@ class DatabaseManager:
     def get_inventory(self, user_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
+        c.execute("SELECT hint_count, skip_count, rebound_count, balance, streak_protect, bal_photo_count FROM inventory WHERE user_id=?", (user_id,))
         result = c.fetchone()
         conn.close()
         if result: 
             return {
-                'hint': result[1], 
-                'skip': result[2], 
-                'rebound': result[3],
-                'streak': result[5] if len(result) > 5 else 0,
-                'streak_protect': result[5] if len(result) > 5 else 0
+                'hint': result[0], 
+                'skip': result[1], 
+                'rebound': result[2],
+                'balance': result[3],
+                'streak': result[4],
+                'streak_protect': result[4],
+                'bal_photo': result[5] if len(result) > 5 else 0
             }
-        return {'hint': 0, 'skip': 0, 'rebound': 0, 'streak': 0, 'streak_protect': 0}
+        return {'hint': 0, 'skip': 0, 'rebound': 0, 'streak': 0, 'streak_protect': 0, 'bal_photo': 0, 'balance': 0}
     
     def buy_boost(self, user_id, boost_type, price):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        balance = self.get_balance(user_id)
-        if balance < price: return False
         
-        c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
-        if not c.fetchone():
-            c.execute("INSERT INTO inventory (user_id) VALUES (?)", (user_id,))
-        
+        # Check balance
+        c.execute("SELECT balance FROM inventory WHERE user_id=?", (user_id,))
+        res = c.fetchone()
+        if not res or res[0] < price:
+            conn.close()
+            return False
+            
+        # Deduct balance
         c.execute("UPDATE inventory SET balance = balance - ? WHERE user_id=?", (price, user_id))
         
-        if boost_type == 'bio':
+        # Add to inventory (except for one-time access items like bio and bal_photo)
+        if boost_type not in ['bio', 'bal_photo']:
+            col_map = {
+                'hint': 'hint_count',
+                'skip': 'skip_count',
+                'rebound': 'rebound_count',
+                'streak': 'streak_protect'
+            }
+            col = col_map.get(boost_type)
+            if col:
+                c.execute(f"UPDATE inventory SET {col} = {col} + 1 WHERE user_id=?", (user_id,))
+        elif boost_type == 'bio':
             c.execute("UPDATE titles SET has_bio_access = 1 WHERE user_id=?", (user_id,))
-            conn.commit()
-            conn.close()
-            return True
         elif boost_type == 'bal_photo':
-            # Entry existence already handled in buy_boost_command but double check here
+            c.execute("UPDATE inventory SET bal_photo_count = bal_photo_count + 1 WHERE user_id=?", (user_id,))
             c.execute("SELECT * FROM titles WHERE user_id=?", (user_id,))
             if not c.fetchone():
                 c.execute("INSERT INTO titles (user_id) VALUES (?)", (user_id,))
-            conn.commit()
-            conn.close()
-            return True
-
-        # Mapping boost_type to column name
-        col_map = {
-            'hint': 'hint_count',
-            'skip': 'skip_count',
-            'rebound': 'rebound_count',
-            'streak': 'streak_protect'
-        }
-        col = col_map.get(boost_type, f"{boost_type}_count")
         
-        c.execute(f"UPDATE inventory SET {col} = {col} + 1 WHERE user_id=?", (user_id,))
         conn.commit()
         conn.close()
         return True
