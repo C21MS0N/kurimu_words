@@ -119,36 +119,35 @@ class DatabaseManager:
                 average_word_length REAL DEFAULT 0.0
             )
         ''')
-    # Create inventory table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS inventory (
-            user_id INTEGER PRIMARY KEY,
-            hint_count INTEGER DEFAULT 0,
-            skip_count INTEGER DEFAULT 0,
-            rebound_count INTEGER DEFAULT 0,
-            streak_protect INTEGER DEFAULT 0,
-            balance INTEGER DEFAULT 0,
-            bal_photo_count INTEGER DEFAULT 0
-        )
-    ''')
-    
-    # Migration for existing inventory table
-    try:
-        c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS inventory (
+                user_id INTEGER PRIMARY KEY,
+                hint_count INTEGER DEFAULT 0,
+                skip_count INTEGER DEFAULT 0,
+                rebound_count INTEGER DEFAULT 0,
+                streak_protect INTEGER DEFAULT 0,
+                balance INTEGER DEFAULT 0,
+                bal_photo_count INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # Migration for existing inventory table
+        try:
+            c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
 
-    # Force update NULLs to 0 to prevent "None" errors
-    try:
-        c.execute("UPDATE inventory SET bal_photo_count = 0 WHERE bal_photo_count IS NULL")
-        c.execute("UPDATE inventory SET hint_count = 0 WHERE hint_count IS NULL")
-        c.execute("UPDATE inventory SET skip_count = 0 WHERE skip_count IS NULL")
-        c.execute("UPDATE inventory SET rebound_count = 0 WHERE rebound_count IS NULL")
-        c.execute("UPDATE inventory SET streak_protect = 0 WHERE streak_protect IS NULL")
-        c.execute("UPDATE inventory SET balance = 0 WHERE balance IS NULL")
-    except sqlite3.OperationalError:
-        pass
-            
+        # Force update NULLs to 0 to prevent "None" errors
+        try:
+            c.execute("UPDATE inventory SET bal_photo_count = 0 WHERE bal_photo_count IS NULL")
+            c.execute("UPDATE inventory SET hint_count = 0 WHERE hint_count IS NULL")
+            c.execute("UPDATE inventory SET skip_count = 0 WHERE skip_count IS NULL")
+            c.execute("UPDATE inventory SET rebound_count = 0 WHERE rebound_count IS NULL")
+            c.execute("UPDATE inventory SET streak_protect = 0 WHERE streak_protect IS NULL")
+            c.execute("UPDATE inventory SET balance = 0 WHERE balance IS NULL")
+        except sqlite3.OperationalError:
+            pass
+
         try:
             c.execute("ALTER TABLE leaderboard ADD COLUMN last_daily TEXT")
         except sqlite3.OperationalError:
