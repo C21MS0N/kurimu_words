@@ -1272,7 +1272,7 @@ async def shop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = f"🛍️ <b>SHOP</b> 💰 Balance: <b>{balance} pts</b>\n\n"
     for boost_type, details in SHOP_BOOSTS.items():
-        owned = inventory[boost_type]
+        owned = inventory.get(boost_type, 0)
         text += f"{details['description']}\n💵 Price: <b>{details['price']} pts</b> - Owned: <b>{owned}</b>\n/buy_{boost_type}\n\n"
     
     text += "<b>🖋️ PERSONAL BIO</b>\n"
