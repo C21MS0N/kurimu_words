@@ -476,6 +476,14 @@ class DatabaseManager:
             conn.commit()
             conn.close()
             return True
+        elif boost_type == 'bal_photo':
+            # Entry existence already handled in buy_boost_command but double check here
+            c.execute("SELECT * FROM titles WHERE user_id=?", (user_id,))
+            if not c.fetchone():
+                c.execute("INSERT INTO titles (user_id) VALUES (?)", (user_id,))
+            conn.commit()
+            conn.close()
+            return True
 
         # Mapping boost_type to column name
         col_map = {
