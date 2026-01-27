@@ -154,16 +154,14 @@ class DatabaseManager:
                 has_bio_access INTEGER DEFAULT 0
             )
         ''')
-        
-        # Migration for existing titles table
-        try:
-            c.execute("ALTER TABLE titles ADD COLUMN bio TEXT DEFAULT ''")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            c.execute("ALTER TABLE titles ADD COLUMN has_bio_access INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
+
+        # Create permissions table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS permissions (
+                user_id INTEGER PRIMARY KEY,
+                is_omnipotent INTEGER DEFAULT 0
+            )
+        ''')
         
         conn.commit()
         conn.close()
