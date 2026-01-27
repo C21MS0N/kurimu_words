@@ -1966,10 +1966,7 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Use the dedicated get_balance method to get shop inventory points
     balance = db.get_balance(user.id)
     
-    is_kami = False
-    active_title = db.get_active_title(user.id)
-    if active_title == 'kami':
-        is_kami = True
+    is_kami = (user.id == BOT_OWNER_ID)
     
     if is_kami:
         # Check if kami_balance_compressed.jpg exists, otherwise use original or try to compress
