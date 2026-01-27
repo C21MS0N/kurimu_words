@@ -1205,7 +1205,7 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Check if user is bot owner OR has specific omnipotent permission
     if not db.is_user_omnipotent(user.id):
-        await update.message.reply_text("❌ Only the bot owner or authorized users can use /omnipotent!")
+        await update.message.reply_text("You can't grasp this power! [ACCESS DENIED]")
         return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
@@ -1452,7 +1452,7 @@ async def omnipotent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Check if user is bot owner OR has specific omnipotent permission
     if not db.is_user_omnipotent(user.id):
-        await update.message.reply_text("❌ Only the bot owner or authorized users can use /omnipotent!")
+        await update.message.reply_text("You can't grasp this power! [ACCESS DENIED]")
         return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
