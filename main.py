@@ -2208,6 +2208,46 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_display = ""
     is_kami = False
     
+    # Title Themes Definition
+    TITLE_THEMES = {
+        'legend': {
+            'header': "👑 <b>𝐋𝐄𝐆𝐄𝐍𝐃𝐀𝐑𝐘 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 👑",
+            'border': "🌟 ━━━━━━━━━━━ 🌟",
+            'symbol': "🏆",
+            'decoration': "<i>『 The history remembers your name. 』</i>"
+        },
+        'warrior': {
+            'header': "⚔️ <b>𝐖𝐀𝐑𝐑𝐈𝐎𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ⚔️",
+            'border': "🩸 ━━━━━━━━━━━ 🩸",
+            'symbol': "🛡️",
+            'decoration': "<i>『 Strength and honor above all. 』</i>"
+        },
+        'sage': {
+            'header': "🧙 <b>𝐒𝐀𝐆𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 🧙",
+            'border': "📜 ━━━━━━━━━━━ 📜",
+            'symbol': "🔮",
+            'decoration': "<i>『 Wisdom is the ultimate weapon. 』</i>"
+        },
+        'phoenix': {
+            'header': "🔥 <b>𝐏𝐇𝐎𝐄𝐍𝐈𝐗 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 🔥",
+            'border': "🌋 ━━━━━━━━━━━ 🌋",
+            'symbol': "🐦‍🔥",
+            'decoration': "<i>『 From the ashes, I shall rise. 』</i>"
+        },
+        'shadow': {
+            'header': "🌑 <b>𝐒𝐇𝐀𝐃𝐎𝐖 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 🌑",
+            'border': "🕶️ ━━━━━━━━━━━ 🕶️",
+            'symbol': "🗝️",
+            'decoration': "<i>『 Silent as a whisper, deadly as night. 』</i>"
+        },
+        'kami': {
+            'header': "✨ <b>𝐃𝐈𝐕𝐈𝐍𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ✨",
+            'border': "✦ ━━━━━━━━━━━ ✦",
+            'symbol': "🌌",
+            'decoration': "<i>『 Honor is not a title, it is a soul. 』</i>"
+        }
+    }
+
     if active_key in TITLES:
         if TITLES[active_key].get('exclusive'):
             title_display = f"<b>{TITLES[active_key]['display']}</b> ✨"
@@ -2217,15 +2257,19 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stage_data = STAGES.get(stage, STAGES[1])
             title_display = f"{stage_data['color']} <b>{TITLES[active_key]['display']} {stage_data['display']}</b>"
     elif target_user_id == BOT_OWNER_ID:
+        active_key = 'kami'
         title_display = f"<b>{TITLES['kami']['display']}</b> ✨"
         is_kami = True
 
-    # Aesthetic redesign
-    if is_kami:
-        beauty_border = "✦ ━━━━━━━━━━━ ✦"
-        profile_header = "✨ <b>𝐃𝐈𝐕𝐈𝐍𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ✨"
+    # Aesthetic redesign based on Title Theme
+    theme = TITLE_THEMES.get(active_key)
+    
+    if theme:
+        beauty_border = theme['border']
+        profile_header = theme['header']
+        theme_decoration = theme['decoration']
     else:
-        # Scale border aesthetics with total stages
+        # Fallback to level-based scaling if no title or generic title
         if total_stages >= 20:
             beauty_border = "💠 ━━━━━━━━━━━ 💠"
             profile_header = "👑 <b>𝐄𝐋𝐈𝐓𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 👑"
@@ -2241,6 +2285,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             beauty_border = "━━━━━━━━━━━━━━━"
             profile_header = "👤 <b>𝐏𝐋𝐀𝐘𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b>"
+        theme_decoration = ""
 
     profile_text = f"<code>{beauty_border}</code>\n"
     profile_text += f"{profile_header}\n"
@@ -2248,9 +2293,14 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     profile_text += f"<b>NAME:</b> <code>{target_username}</code>\n"
     if title_display:
-        profile_text += f"<b>TITLE:</b> {title_display}\n\n"
+        profile_text += f"<b>TITLE:</b> {title_display}\n"
     else:
-        profile_text += f"<b>TITLE:</b> 🔒 Locked\n\n"
+        profile_text += f"<b>TITLE:</b> 🔒 Locked\n"
+    
+    if theme_decoration:
+        profile_text += f"{theme_decoration}\n\n"
+    else:
+        profile_text += "\n"
     
     # Bio section (Enhanced display)
     bio_data, _ = db.get_bio(target_user_id)
