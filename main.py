@@ -510,10 +510,12 @@ class DatabaseManager:
         elif boost_type == 'bio':
             c.execute("UPDATE titles SET has_bio_access = 1 WHERE user_id=?", (user_id,))
         elif boost_type == 'bal_photo':
-            c.execute("UPDATE titles SET has_bal_photo_access = 1 WHERE user_id=?", (user_id,))
-            c.execute("SELECT * FROM titles WHERE user_id=?", (user_id,))
+            # Fix: Ensure record exists and update license
+            c.execute("SELECT user_id FROM titles WHERE user_id=?", (user_id,))
             if not c.fetchone():
                 c.execute("INSERT INTO titles (user_id, has_bal_photo_access) VALUES (?, 1)", (user_id,))
+            else:
+                c.execute("UPDATE titles SET has_bal_photo_access = 1 WHERE user_id=?", (user_id,))
         
         conn.commit()
         conn.close()
