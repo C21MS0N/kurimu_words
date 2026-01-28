@@ -161,13 +161,18 @@ class DatabaseManager:
                 unlocked_titles TEXT DEFAULT '',
                 bio TEXT DEFAULT '',
                 has_bio_access INTEGER DEFAULT 0,
-                custom_bal_photo_id TEXT DEFAULT ''
+                custom_bal_photo_id TEXT DEFAULT '',
+                has_bal_photo_access INTEGER DEFAULT 0
             )
         ''')
 
         # Migration for existing titles table
         try:
             c.execute("ALTER TABLE titles ADD COLUMN custom_bal_photo_id TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute("ALTER TABLE titles ADD COLUMN has_bal_photo_access INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass
 
@@ -533,14 +538,19 @@ class DatabaseManager:
     def set_custom_bal_photo(self, user_id, file_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
-        # Consume the photo access if they have it
-        c.execute("UPDATE inventory SET bal_photo_count = MAX(0, bal_photo_count - 1) WHERE user_id=?", (user_id,))
-        
-        c.execute("UPDATE titles SET custom_bal_photo_id = ? WHERE user_id=?", (file_id, user_id))
+        c.execute("UPDATE titles SET custom_bal_photo_id = ?, has_bal_photo_access = 0 WHERE user_id=?", (file_id, user_id))
         if c.rowcount == 0:
-            c.execute("INSERT INTO titles (user_id, custom_bal_photo_id) VALUES (?, ?)", (user_id, file_id))
+            c.execute("INSERT INTO titles (user_id, custom_bal_photo_id, has_bal_photo_access) VALUES (?, ?, 0)", (user_id, file_id))
         conn.commit()
         conn.close()
+
+    def has_bal_photo_access(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT has_bal_photo_access FROM titles WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        return result[0] if result else 0
 
     def get_bio(self, user_id):
         conn = sqlite3.connect(self.db_name)
@@ -1327,7 +1337,24 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, /buy_rebound, /buy_streak, /buy_bio, or /buy_bal_photo")
         return
     
-    price = 1500 if boost_type == 'bal_photo' else (500 if boost_type == 'bio' else SHOP_BOOSTS[boost_type]['price'])
+    # Custom handling for bal_photo to use 'has_bal_photo_access' logic
+    if boost_type == 'bal_photo':
+        if db.has_bal_photo_access(user.id):
+            await update.message.reply_text("❌ You already have an unused Balance Photo license! Use /setbalpic first.")
+            return
+        
+        price = 1500
+        if db.buy_boost(user.id, 'bal_photo_license', price): # Using a special key for internal handling
+            # buy_boost needs to handle the column update or we do it here
+            conn = sqlite3.connect(db.db_name)
+            c = conn.cursor()
+            c.execute("UPDATE titles SET has_bal_photo_access = 1 WHERE user_id = ?", (user.id,))
+            conn.commit()
+            conn.close()
+            await update.message.reply_text("✅ <b>Custom Balance Photo Access Purchased!</b>\n\nTo set your photo, reply to any image with <code>/setbalpic</code>.", parse_mode='HTML')
+            return
+    
+    price = 500 if boost_type == 'bio' else SHOP_BOOSTS.get(boost_type, {}).get('price', 0)
     if db.buy_boost(user.id, boost_type, price):
         if boost_type == 'bio':
             await update.message.reply_text("✅ <b>Bio Access Purchased!</b>\n\nUse /bio [text] to set your custom profile message (Max 40 words).", parse_mode='HTML')
@@ -2009,8 +2036,7 @@ async def setbalpic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_message_stale(update): return
     user = update.effective_user
     
-    inventory = db.get_inventory(user.id)
-    if inventory.get('bal_photo_count', 0) <= 0:
+    if not db.has_bal_photo_access(user.id):
         await update.message.reply_text("❌ You need to purchase 'Custom Balance Photo' from the /shop for 1500 pts first!")
         return
     
