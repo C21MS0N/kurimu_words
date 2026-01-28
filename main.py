@@ -1107,7 +1107,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Fetch all players to find the user's rank
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute(f"SELECT user_id, profile_name, {category} FROM leaderboard ORDER BY {category} DESC")
+    c.execute(f"SELECT user_id, username, {category} FROM leaderboard ORDER BY {category} DESC")
     all_players = c.fetchall()
     conn.close()
 
