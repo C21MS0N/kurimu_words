@@ -1102,11 +1102,38 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     category_input = context.args[0].lower() if context.args else 'score'
     category = category_map.get(category_input, 'total_score')
+    user_id = update.effective_user.id
 
-    top = db.get_top_players(category=category, limit=10)
-    if not top:
+    # Fetch all players to find the user's rank
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute(f"SELECT user_id, profile_name, {category} FROM leaderboard ORDER BY {category} DESC")
+    all_players = c.fetchall()
+    conn.close()
+
+    if not all_players:
         await update.message.reply_text("🏆 Leaderboard is empty!")
         return
+
+    # Find user's rank
+    user_rank = -1
+    for idx, (p_id, p_name, p_val) in enumerate(all_players, 1):
+        if p_id == user_id:
+            user_rank = idx
+            break
+    
+    # Calculate page range (10 per page)
+    if user_rank == -1:
+        start_idx = 0
+        end_idx = 10
+    else:
+        # Determine which page of 10 the user is on
+        page = (user_rank - 1) // 10
+        start_idx = page * 10
+        end_idx = start_idx + 10
+
+    # Get the slice for the page
+    page_players = all_players[start_idx:end_idx]
 
     category_names = {
         'total_score': 'Total Score',
@@ -1115,12 +1142,26 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'longest_word_length': 'Longest Word'
     }
 
-    text = f"🏆 <b>Leaderboard - {category_names.get(category, 'Total Score')}</b> 🏆\n\n"
-    for idx, (name, value) in enumerate(top, 1):
-        emoji = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
-        text += f"{emoji} <b>{name}</b> - {value}\n"
+    text = f"🏆 <b>Leaderboard - {category_names.get(category, 'Total Score')}</b> 🏆\n"
+    text += f"<i>Showing ranks {start_idx + 1} - {min(end_idx, len(all_players))}</i>\n\n"
+    
+    for idx, (p_id, p_name, p_val) in enumerate(page_players, start_idx + 1):
+        # Emojis for top 3
+        if idx == 1: emoji = "🥇"
+        elif idx == 2: emoji = "🥈"
+        elif idx == 3: emoji = "🥉"
+        else: emoji = f"{idx}."
 
-    text += "\n💡 Use: /leaderboard [score/words/streak/longest]"
+        # Highlight current user
+        if p_id == user_id:
+            text += f"👉 <b>{emoji} {p_name} - {p_val}</b> (YOU)\n"
+        else:
+            text += f"{emoji} <b>{p_name}</b> - {p_val}\n"
+
+    if user_rank != -1:
+        text += f"\n👤 Your Rank: <b>#{user_rank}</b>"
+    
+    text += "\n\n💡 Use: /leaderboard [score/words/streak/longest]"
     await update.message.reply_text(text, parse_mode='HTML')
 
 async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
