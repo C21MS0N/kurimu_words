@@ -372,7 +372,7 @@ class DatabaseManager:
         conn.close()
 
     def add_balance(self, user_id, amount):
-        """Add points to user's shop balance and total score"""
+        """Add points to user's shop balance (Currency only)"""
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
         
@@ -382,11 +382,6 @@ class DatabaseManager:
             c.execute("INSERT INTO inventory (user_id, balance) VALUES (?, ?)", (user_id, amount))
         else:
             c.execute("UPDATE inventory SET balance = balance + ? WHERE user_id=?", (amount, user_id))
-            
-        # Update leaderboard total_score (omnipotent points should reflect in leaderboard)
-        c.execute("SELECT * FROM leaderboard WHERE user_id=?", (user_id,))
-        if c.fetchone():
-            c.execute("UPDATE leaderboard SET total_score = total_score + ? WHERE user_id=?", (amount, user_id))
             
         conn.commit()
         conn.close()
