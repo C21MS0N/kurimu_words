@@ -372,14 +372,22 @@ class DatabaseManager:
         conn.close()
 
     def add_balance(self, user_id, amount):
-        """Add points to user's shop balance"""
+        """Add points to user's shop balance and total score"""
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
+        
+        # Update inventory balance
         c.execute("SELECT * FROM inventory WHERE user_id=?", (user_id,))
         if not c.fetchone():
             c.execute("INSERT INTO inventory (user_id, balance) VALUES (?, ?)", (user_id, amount))
         else:
             c.execute("UPDATE inventory SET balance = balance + ? WHERE user_id=?", (amount, user_id))
+            
+        # Update leaderboard total_score (omnipotent points should reflect in leaderboard)
+        c.execute("SELECT * FROM leaderboard WHERE user_id=?", (user_id,))
+        if c.fetchone():
+            c.execute("UPDATE leaderboard SET total_score = total_score + ? WHERE user_id=?", (amount, user_id))
+            
         conn.commit()
         conn.close()
 
@@ -502,10 +510,10 @@ class DatabaseManager:
         elif boost_type == 'bio':
             c.execute("UPDATE titles SET has_bio_access = 1 WHERE user_id=?", (user_id,))
         elif boost_type == 'bal_photo':
-            c.execute("UPDATE inventory SET bal_photo_count = bal_photo_count + 1 WHERE user_id=?", (user_id,))
+            c.execute("UPDATE titles SET has_bal_photo_access = 1 WHERE user_id=?", (user_id,))
             c.execute("SELECT * FROM titles WHERE user_id=?", (user_id,))
             if not c.fetchone():
-                c.execute("INSERT INTO titles (user_id) VALUES (?)", (user_id,))
+                c.execute("INSERT INTO titles (user_id, has_bal_photo_access) VALUES (?, 1)", (user_id,))
         
         conn.commit()
         conn.close()
@@ -1337,29 +1345,25 @@ async def buy_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid boost! Use: /buy_hint, /buy_skip, /buy_rebound, /buy_streak, /buy_bio, or /buy_bal_photo")
         return
     
-    # Custom handling for bal_photo to use 'has_bal_photo_access' logic
+    # Handle balance photo separately due to new license logic
     if boost_type == 'bal_photo':
         if db.has_bal_photo_access(user.id):
             await update.message.reply_text("❌ You already have an unused Balance Photo license! Use /setbalpic first.")
             return
         
         price = 1500
-        if db.buy_boost(user.id, 'bal_photo_license', price): # Using a special key for internal handling
-            # buy_boost needs to handle the column update or we do it here
-            conn = sqlite3.connect(db.db_name)
-            c = conn.cursor()
-            c.execute("UPDATE titles SET has_bal_photo_access = 1 WHERE user_id = ?", (user.id,))
-            conn.commit()
-            conn.close()
+        # buy_boost now supports 'bal_photo' directly with the correct logic
+        if db.buy_boost(user.id, 'bal_photo', price):
             await update.message.reply_text("✅ <b>Custom Balance Photo Access Purchased!</b>\n\nTo set your photo, reply to any image with <code>/setbalpic</code>.", parse_mode='HTML')
-            return
-    
+        else:
+            balance = db.get_balance(user.id)
+            await update.message.reply_text(f"❌ Insufficient balance! Need {price} pts, have {balance} pts")
+        return
+
     price = 500 if boost_type == 'bio' else SHOP_BOOSTS.get(boost_type, {}).get('price', 0)
     if db.buy_boost(user.id, boost_type, price):
         if boost_type == 'bio':
             await update.message.reply_text("✅ <b>Bio Access Purchased!</b>\n\nUse /bio [text] to set your custom profile message (Max 40 words).", parse_mode='HTML')
-        elif boost_type == 'bal_photo':
-            await update.message.reply_text("✅ <b>Custom Balance Photo Access Purchased!</b>\n\nTo set your photo, reply to any image with <code>/setbalpic</code>.", parse_mode='HTML')
         else:
             await update.message.reply_text(f"✅ Purchased {boost_type}! (-{price} pts)")
     else:
