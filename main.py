@@ -508,7 +508,12 @@ class DatabaseManager:
             if col:
                 c.execute(f"UPDATE inventory SET {col} = {col} + 1 WHERE user_id=?", (user_id,))
         elif boost_type == 'bio':
-            c.execute("UPDATE titles SET has_bio_access = 1 WHERE user_id=?", (user_id,))
+            # Ensure titles record exists
+            c.execute("SELECT user_id FROM titles WHERE user_id=?", (user_id,))
+            if not c.fetchone():
+                c.execute("INSERT INTO titles (user_id, has_bio_access) VALUES (?, 1)", (user_id,))
+            else:
+                c.execute("UPDATE titles SET has_bio_access = 1 WHERE user_id=?", (user_id,))
         elif boost_type == 'bal_photo':
             # Fix: Ensure record exists and update license
             c.execute("SELECT user_id FROM titles WHERE user_id=?", (user_id,))
