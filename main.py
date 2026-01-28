@@ -533,7 +533,12 @@ class DatabaseManager:
     def set_custom_bal_photo(self, user_id, file_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
+        # Consume the photo access if they have it
+        c.execute("UPDATE inventory SET bal_photo_count = MAX(0, bal_photo_count - 1) WHERE user_id=?", (user_id,))
+        
         c.execute("UPDATE titles SET custom_bal_photo_id = ? WHERE user_id=?", (file_id, user_id))
+        if c.rowcount == 0:
+            c.execute("INSERT INTO titles (user_id, custom_bal_photo_id) VALUES (?, ?)", (user_id, file_id))
         conn.commit()
         conn.close()
 
@@ -549,6 +554,8 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
         c.execute("UPDATE titles SET bio = ?, has_bio_access = 0 WHERE user_id=?", (bio_text, user_id))
+        if c.rowcount == 0:
+            c.execute("INSERT INTO titles (user_id, bio, has_bio_access) VALUES (?, ?, 0)", (user_id, bio_text))
         conn.commit()
         conn.close()
 
@@ -2002,29 +2009,16 @@ async def setbalpic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_message_stale(update): return
     user = update.effective_user
     
-    # Check if they have purchased the boost or have points (we use a simple check for existence of the column value is easier)
-    # But to be strict, we check if they've bought it. For now, let's assume they need to have bought it.
-    # In buy_boost, we don't have a specific "has_access" for bal_photo yet, let's add it.
+    inventory = db.get_inventory(user.id)
+    if inventory.get('bal_photo_count', 0) <= 0:
+        await update.message.reply_text("❌ You need to purchase 'Custom Balance Photo' from the /shop for 1500 pts first!")
+        return
     
     if not update.message.reply_to_message or not update.message.reply_to_message.photo:
         await update.message.reply_text("❌ Please reply to an image with /setbalpic to set your balance background.")
         return
     
-    # Verify purchase (using balance as proxy or a new column is better)
-    # For now, let's allow it if they have the points or we can just trust the flow.
-    # Actually, let's check if they have any balance or if they just bought it.
-    
     photo = update.message.reply_to_message.photo[-1].file_id
-    
-    # Ensure entry exists in titles table before update
-    conn = sqlite3.connect(db.db_name)
-    c = conn.cursor()
-    c.execute("SELECT * FROM titles WHERE user_id=?", (user.id,))
-    if not c.fetchone():
-        c.execute("INSERT INTO titles (user_id) VALUES (?)", (user.id,))
-        conn.commit()
-    conn.close()
-    
     db.set_custom_bal_photo(user.id, photo)
     await update.message.reply_text("✅ Your custom /bal picture has been set!")
 
@@ -2220,7 +2214,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if bio_data:
         profile_text += f"📝 <b>BIO</b>\n"
         profile_text += f"« <i>{bio_data}</i> »\n\n"
-    elif str(target_user_id) == str(user.id):
+    elif target_user_id == user.id:
         profile_text += f"💡 <i>Tip: Use /buy_bio to add a personal message!</i>\n\n"
     
     # Statistics section (Requested layout)
@@ -2264,7 +2258,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             profile_text += f" {t_data['display'][:2]} {bar} <code>{progress_str}</code>\n"
     else:
         profile_text += f"🌌 <b>CELESTIAL MASTERY</b>\n"
-        profile_text += f"<i>All knowledge and power is yours.</i>\n"
+        profile_text += f"<i>『ƈʀɨʍֆօռ♦』alone is the honored one.</i>\n"
     
     profile_text += f"\n<code>{beauty_border}</code>"
     
