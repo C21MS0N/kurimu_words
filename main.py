@@ -2640,6 +2640,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("buy_rebound", buy_boost_command))
                 application.add_handler(CommandHandler("buy_streak", buy_boost_command))
                 application.add_handler(CommandHandler("buy_bio", buy_boost_command))
+                application.add_handler(CommandHandler("buy_bal_photo", buy_boost_command))
                 application.add_handler(CommandHandler("hint", hint_boost_command))
                 application.add_handler(CommandHandler("skip", skip_boost_command))
                 application.add_handler(CommandHandler("skip_boost", skip_boost_command))
