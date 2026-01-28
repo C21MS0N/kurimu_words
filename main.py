@@ -2057,6 +2057,12 @@ async def setbalpic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     photo = update.message.reply_to_message.photo[-1].file_id
     db.set_custom_bal_photo(user.id, photo)
+    # Re-enable the license by setting has_bal_photo_access back to 1
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE titles SET has_bal_photo_access = 1 WHERE user_id = ?", (user.id,))
+    conn.commit()
+    conn.close()
     await update.message.reply_text("✅ Your custom /bal picture has been set!")
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
