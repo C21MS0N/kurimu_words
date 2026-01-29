@@ -68,11 +68,11 @@ BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env 
 
 # Available Titles with Dynamic Requirements (Multi-Stage)
 STAGES = {
-    1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 1},
-    2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 2.5},
-    3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 5},
-    4: {'display': 'Ⅳ', 'color': '🟡', 'multiplier': 10},
-    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 25},
+    1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 3},
+    2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 6},
+    3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 9},
+    4: {'display': 'Ⅳ', 'color': '🟡', 'multiplier': 12},
+    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 15},
 }
 
 TITLES = {
@@ -80,7 +80,7 @@ TITLES = {
     'warrior': {'display': '⚔️ WARRIOR', 'base_req': 10, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
     'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req}+ words'},
     'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req}+ games'},
-    'shadow': {'display': '🌑 SHADOW', 'base_req': 5, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
+    'shadow': {'display': '🌑 SHADOW', 'base_req': 1, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
     'kami': {'display': '✨ KAMI', 'exclusive': True}
 }
 
