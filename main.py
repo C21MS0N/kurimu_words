@@ -733,12 +733,15 @@ class GameState:
     def increment_streak(self, user_id: int):
         self.player_streaks[user_id] = self.player_streaks.get(user_id, 0) + 1
 
-    def reset_streak(self, user_id: int):
+    def reset_streak(self, user_id: int, is_timeout: bool = False):
         if user_id in self.player_streaks:
+            # If they have protection, use it and don't reset
             inventory = db.get_inventory(user_id)
             if inventory.get('streak_protect', 0) > 0:
                 db.use_boost(user_id, 'streak_protect')
                 return
+            
+            # Reset to 0 if no protection
             self.player_streaks[user_id] = 0
 
     # Removed can_use_hint, use_hint, can_skip, use_skip, get_hint_words methods
@@ -848,7 +851,7 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
 
         # Player timed out
         game.eliminated_players.add(user_id)
-        game.reset_streak(user_id)
+        game.reset_streak(user_id, is_timeout=True)
         
         if not game.is_practice:
             db.update_word_stats(user_id, current_player['name'], "", 0, forfeit=True)
@@ -1692,17 +1695,8 @@ async def donate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """View only unlocked achievements/titles"""
     user = update.effective_user
-    newly_unlocked = db.auto_unlock_titles(user.id)
-    
-    if newly_unlocked:
-        unlock_msg = "🎊 <b>ACHIEVEMENT LEVELED UP!</b> 🎊\n\n"
-        for title_key, stage in newly_unlocked:
-            title_data = TITLES[title_key]
-            stage_data = STAGES[stage]
-            unlock_msg += f"{stage_data['color']} <b>{title_data['display']} {stage_data['display']}</b>\n"
-        await update.message.reply_text(unlock_msg, parse_mode='HTML')
-    
     unlocked_list = db.get_unlocked_titles(user.id)
     unlocked_stages = {}
     for entry in unlocked_list:
@@ -1712,37 +1706,64 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
             
     active = db.get_active_title(user.id)
     
-    text = "🏆 <b>Achievement Stages</b>\n\n"
+    text = "🏆 <b>Your Unlocked Titles</b>\n\n"
+    has_any = False
+    
+    # Check exclusive first
+    if user.id == BOT_OWNER_ID:
+        text += f"✨ <b>KAMI</b>\n  <i>Exclusive Divine Title</i>\n\n"
+        has_any = True
+        
     for title_key, title_data in TITLES.items():
-        if title_data.get('exclusive'):
-            if user.id == BOT_OWNER_ID:
-                text += f"✨ <b>{title_data['display']}</b>\n  <i>Superior Divine Title</i>\n\n"
-            continue
+        if title_data.get('exclusive'): continue
+            
+        stage = unlocked_stages.get(title_key, 0)
+        if stage > 0:
+            has_any = True
+            text += f"<b>{title_data['display']}</b> "
+            text += STAGES[stage]['display']
+            if title_key == active:
+                text += " ⭐ (Equipped)"
+            text += f"\n  <i>Current Level: {stage}/5</i>\n\n"
+    
+    if not has_any:
+        text += "<i>No titles unlocked yet. Keep playing to earn achievements!</i>\n"
+    
+    text += "\n/progress - Check what you need next\n/settitle [title] - Change your title"
+    await update.message.reply_text(text, parse_mode='HTML')
+
+async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """View upcoming requirements and milestones"""
+    user = update.effective_user
+    unlocked_list = db.get_unlocked_titles(user.id)
+    unlocked_stages = {}
+    for entry in unlocked_list:
+        if ':' in entry:
+            k, s = entry.split(':')
+            unlocked_stages[k] = int(s)
+            
+    text = "📊 <b>Title Progress & Requirements</b>\n\n"
+    for title_key, title_data in TITLES.items():
+        if title_data.get('exclusive'): continue
             
         current_stage = unlocked_stages.get(title_key, 0)
         text += f"<b>{title_data['display']}</b> "
+        
+        # Draw progress bar
         for s in range(1, 6):
-            if s <= current_stage:
-                text += STAGES[s]['display']
-            else:
-                text += "▫️"
+            text += STAGES[s]['display'] if s <= current_stage else "▫️"
         
-        active_mark = " ⭐" if title_key == active else ""
-        text += active_mark + "\n"
-        
+        text += "\n"
         if current_stage < 5:
             next_stage = current_stage + 1
             req_val = int(title_data['base_req'] * STAGES[next_stage]['multiplier'])
             desc = title_data['desc'].format(req=req_val)
-            text += f"  <i>Next: {desc}</i>\n"
+            text += f"  <i>Next Stage {next_stage}: {desc}</i>\n"
         else:
             text += "  <i>MAX LEVEL REACHED!</i> 💎\n"
         text += "\n"
     
-    text += "Use /settitle [title] to equip.\nUse /profile to see your beautiful progress!"
     await update.message.reply_text(text, parse_mode='HTML')
-
-async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Progress is now integrated into achievements and profile
     await achievements_command(update, context)
 
