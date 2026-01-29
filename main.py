@@ -77,7 +77,7 @@ STAGES = {
 
 TITLES = {
     'legend': {'display': '👑 LEGEND', 'base_req': 1000, 'stat': 'total_score', 'desc': 'Reach {req} total points'},
-    'warrior': {'display': '⚔️ WARRIOR', 'base_req': 10, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
+    'warrior': {'display': '⚔️ WARRIOR', 'base_req': 5, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
     'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req}+ words'},
     'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req}+ games'},
     'shadow': {'display': '🌑 SHADOW', 'base_req': 1, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
@@ -176,6 +176,16 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass
 
+        # Create chat_members table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS chat_members (
+                chat_id INTEGER,
+                user_id INTEGER,
+                username TEXT,
+                PRIMARY KEY (chat_id, user_id)
+            )
+        ''')
+        
         # Create permissions table
         c.execute('''
             CREATE TABLE IF NOT EXISTS permissions (
@@ -2436,7 +2446,7 @@ async def grant_permission(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Revoked omnipotent powers from @{target.username}")
 
 async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Mention all players from the leaderboard who are in this group"""
+    """Mention all known members in this chat"""
     if is_message_stale(update): return
     chat_id = update.effective_chat.id
     user = update.effective_user
@@ -2456,24 +2466,28 @@ async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Only the bot owner, authorized users, or admins can use .tagall!")
         return
 
-    # In Telegram, bots cannot "get all members" of a group due to privacy/API limits.
-    # The most effective way is to tag all known players from the database.
-    
-    conn = sqlite3.connect(db.db_name)
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Get all unique users who have played in this bot
-    c.execute("SELECT username FROM leaderboard WHERE username IS NOT NULL AND username != ''")
+    # Get all unique users seen in this specific chat
+    c.execute("SELECT username FROM chat_members WHERE chat_id = ?", (chat_id,))
     rows = c.fetchall()
     conn.close()
     
     if not rows:
-        await update.message.reply_text("❌ No players found in database to tag!")
+        await update.message.reply_text("❌ No members tracked in this chat yet!")
         return
         
     tag_msg = "📢 <b>ATTENTION EVERYONE!</b> 📢\n\n"
-    # Filter out empty or invalid usernames and join
-    usernames = [f"@{r[0]}" for r in rows if r[0]]
-    tag_msg += " ".join(usernames)
+    usernames = []
+    for r in rows:
+        if r[0]:
+            name = r[0]
+            if not name.startswith('@'):
+                usernames.append(f"@{name}")
+            else:
+                usernames.append(name)
+    
+    tag_msg += " ".join(list(set(usernames))) # Unique tags
     
     custom_msg = " ".join(context.args) if context.args else "Wake up! A new challenge awaits!"
     tag_msg += f"\n\n💬 {custom_msg}"
@@ -2596,9 +2610,24 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game.used_words.discard(word)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Main message handler for word game and member tracking"""
+    if is_message_stale(update): return
+    
     chat_id = update.effective_chat.id
-    if chat_id not in games or not update.message or not update.message.text: return
+    user = update.effective_user
+    
+    # Track member for .tagall
+    if not user.is_bot:
+        username = user.username or user.first_name or "Player"
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO chat_members (chat_id, user_id, username) VALUES (?, ?, ?)",
+                 (chat_id, user.id, username))
+        conn.commit()
+        conn.close()
 
+    if chat_id not in games or not update.message or not update.message.text: return
+    
     game = games[chat_id]
     user = update.effective_user
     msg_text = (update.message.text or "").lower()
