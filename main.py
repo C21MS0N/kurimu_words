@@ -715,9 +715,12 @@ class GameState:
                 self.current_word_length = min(config['start_length'] + increment, config['max_length'])
 
         # Increase internal difficulty level (affects time)
-        difficulty_increased = self.turn_count % 6 == 0
-        if difficulty_increased:
-            self.difficulty_level += 1
+        # We announce it whenever the time actually decreases
+        old_time = self.get_turn_time()
+        self.difficulty_level = self.turn_count // 6
+        new_time = self.get_turn_time()
+        
+        difficulty_increased = new_time < old_time
 
         self.turn_start_time = time.time()
         self.last_word_length = self.current_word_length
