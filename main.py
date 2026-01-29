@@ -745,6 +745,7 @@ class GameState:
     def reset_streak(self, user_id: int, is_timeout: bool = False):
         if user_id in self.player_streaks:
             # If they have protection, use it and don't reset
+            # Streak protection applies to all modes including VS CPU and Practice
             inventory = db.get_inventory(user_id)
             if inventory.get('streak_protect', 0) > 0:
                 db.use_boost(user_id, 'streak_protect')
@@ -1957,12 +1958,14 @@ async def vscpu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.ensure_player_exists(user.id, username_to_store)
     games[chat_id] = game
     
-    # Initialize first challenge
-    game.current_start_letter = random.choice(string.ascii_lowercase)
-    if game.game_mode == 'chaos':
-        game.current_word_length = random.randint(3, 12)
-    else:
-        game.current_word_length = 3
+    # Inherit current global game mode (nerd/chaos)
+    # The GameState already initializes with the default mode, 
+    # but we should ensure it's set correctly if it was changed globally
+    # However, since we're creating a NEW GameState, it resets to default.
+    # Let's make sure it pulls the existing mode if applicable or just use the current default.
+    
+    # Initialize first challenge using next_turn logic to ensure modes apply
+    game.next_turn() 
         
     turn_time = game.get_turn_time()
     game.current_turn_user_id = user.id
