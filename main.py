@@ -287,6 +287,11 @@ class DatabaseManager:
             'total_score': stats[7]
         }
         
+        # Shadow Special Logic: Strict 3/6/9/12/15 word length
+        if title_key == 'shadow':
+            shadow_reqs = {1: 3, 2: 6, 3: 9, 4: 12, 5: 15}
+            return stat_map['longest_word_length'] >= shadow_reqs.get(stage, 15)
+            
         return stat_map.get(title_data['stat'], 0) >= req_val
     
     def auto_unlock_titles(self, user_id):
