@@ -745,13 +745,14 @@ class GameState:
     def reset_streak(self, user_id: int, is_timeout: bool = False):
         if user_id in self.player_streaks:
             # If they have protection, use it and don't reset
-            # Streak protection applies to all modes including VS CPU and Practice
-            inventory = db.get_inventory(user_id)
-            if inventory.get('streak_protect', 0) > 0:
-                db.use_boost(user_id, 'streak_protect')
-                return
+            # Streak protection applies to all modes EXCEPT VS CPU
+            if not self.is_cpu_game:
+                inventory = db.get_inventory(user_id)
+                if inventory.get('streak_protect', 0) > 0:
+                    db.use_boost(user_id, 'streak_protect')
+                    return
             
-            # Reset to 0 if no protection
+            # Reset to 0 if no protection or if it's a CPU game
             self.player_streaks[user_id] = 0
 
     # Removed can_use_hint, use_hint, can_skip, use_skip, get_hint_words methods
@@ -2521,14 +2522,14 @@ async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tag_msg += " ".join(list(set(usernames))) # Unique tags
     
     custom_msg = " ".join(context.args) if context.args else "Wake up! A new challenge awaits!"
-    tag_msg += f"\n\n💬 {custom_msg}"
+    help_text += f"\n\n💬 {custom_msg}"
     
     await update.message.reply_text(tag_msg, parse_mode='HTML')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Complete gameplay guide and rules"""
     help_text = (
-        "🎮 <b>INFINITE WORD GAME - MASTER GUIDE</b> 🎮\n\n"
+        "🎮 <b>KURIMUWORDS - MASTER GUIDE</b> 🎮\n\n"
         "<b>1. HOW TO PLAY</b>\n"
         "• Submit a word that matches the <b>Starting Letter</b> and <b>Required Length</b>.\n"
         "• You have 60 seconds (minus difficulty penalty) to answer.\n"
