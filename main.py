@@ -80,7 +80,7 @@ TITLES = {
     'warrior': {'display': '⚔️ WARRIOR', 'base_req': 10, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
     'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req}+ words'},
     'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req}+ games'},
-    'shadow': {'display': '🌑 SHADOW', 'base_req': 12, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
+    'shadow': {'display': '🌑 SHADOW', 'base_req': 5, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
     'kami': {'display': '✨ KAMI', 'exclusive': True}
 }
 
