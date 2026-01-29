@@ -1764,8 +1764,6 @@ async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += "\n"
     
     await update.message.reply_text(text, parse_mode='HTML')
-    # Progress is now integrated into achievements and profile
-    await achievements_command(update, context)
 
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
