@@ -39,9 +39,9 @@ TURN_TIMEOUT = 60
 
 # Difficulty settings
 DIFFICULTY_MODES = {
-    'easy': {'start_length': 3, 'increment_every': 3, 'max_length': 10},
-    'medium': {'start_length': 3, 'increment_every': 2, 'max_length': 15},
-    'hard': {'start_length': 4, 'increment_every': 1, 'max_length': 20}
+    'easy': {'start_length': 3, 'increment_rate': 3, 'min_length': 3, 'max_length': 10},
+    'medium': {'start_length': 3, 'increment_rate': 2, 'min_length': 3, 'max_length': 15},
+    'hard': {'start_length': 4, 'increment_rate': 1, 'min_length': 4, 'max_length': 20}
 }
 
 # Shop Boosts
@@ -699,16 +699,22 @@ class GameState:
             # Randomize challenges based on mode
             self.current_start_letter = random.choice(string.ascii_lowercase)
             
+            # Use difficulty config for constraints
+            config = DIFFICULTY_MODES.get(self.difficulty, DIFFICULTY_MODES['medium'])
+            
             if self.game_mode == 'chaos':
-                # Chaos: random length (3-12)
-                self.current_word_length = random.randint(3, 12)
+                # Chaos: random length within difficulty range
+                self.current_word_length = random.randint(config['min_length'], config['max_length'])
             else:
                 # Nerd: progressive length
-                # Starts at 3, increases every round (all players have one turn)
                 num_players = len(self.players) if self.players else 1
                 rounds_completed = self.turn_count // num_players
-                self.current_word_length = min(3 + rounds_completed, 15)
+                
+                # Length increases based on difficulty increment rate
+                increment = rounds_completed // config['increment_rate']
+                self.current_word_length = min(config['start_length'] + increment, config['max_length'])
 
+        # Increase internal difficulty level (affects time)
         difficulty_increased = self.turn_count % 6 == 0
         if difficulty_increased:
             self.difficulty_level += 1
@@ -718,9 +724,9 @@ class GameState:
         return difficulty_increased
     
     def get_turn_time(self) -> int:
-        base_time = 30
+        base_time = 60
         time_reduction = self.difficulty_level * 5
-        return max(5, base_time - time_reduction)
+        return max(20, base_time - time_reduction)
     
     def cancel_timeout(self):
         if self.timeout_task and not self.timeout_task.done():
