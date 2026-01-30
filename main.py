@@ -2327,7 +2327,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'header': "✨ <b>𝐃𝐈𝐕𝐈𝐍𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ✨",
             'border': "✦ ━━━━━━━━━━━ ✦",
             'symbol': "🌌",
-            'decoration': "<i>『 Honor is not a title, it is a soul. 』</i>"
+            'decoration': "<i>『 The one neither above nor below all. 』</i>"
         }
     }
 
