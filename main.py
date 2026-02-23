@@ -41,7 +41,7 @@ TURN_TIMEOUT = 60
 DIFFICULTY_MODES = {
     'easy': {'start_length': 3, 'increment_rate': 3, 'min_length': 3, 'max_length': 10},
     'medium': {'start_length': 3, 'increment_rate': 2, 'min_length': 3, 'max_length': 15},
-    'hard': {'start_length': 4, 'increment_rate': 1, 'min_length': 4, 'max_length': 20}
+    'hard': {'start_length': 5, 'increment_rate': 1, 'min_length': 4, 'max_length': 20}
 }
 
 # Shop Boosts
@@ -68,19 +68,19 @@ BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env 
 
 # Available Titles with Dynamic Requirements (Multi-Stage)
 STAGES = {
-    1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 3},
-    2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 6},
-    3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 9},
-    4: {'display': 'Ⅳ', 'color': '🟡', 'multiplier': 12},
+    1: {'display': 'Ⅰ', 'color': '🪵', 'multiplier': 3},
+    2: {'display': 'Ⅱ', 'color': '🟤', 'multiplier': 6},
+    3: {'display': 'Ⅲ', 'color': '🔘', 'multiplier': 9},
+    4: {'display': 'Ⅳ', 'color': '🪙', 'multiplier': 12},
     5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 15},
 }
 
 TITLES = {
-    'legend': {'display': '👑 LEGEND', 'base_req': 1000, 'stat': 'total_score', 'desc': 'Reach {req} total points'},
-    'warrior': {'display': '⚔️ WARRIOR', 'base_req': 5, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
-    'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req}+ words'},
-    'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req}+ games'},
-    'shadow': {'display': '🌑 SHADOW', 'base_req': 1, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
+    'legend': {'display': '👑 LEGEND', 'base_req': 500, 'stat': 'total_score', 'desc': 'Reach {req} total points'},
+    'warrior': {'display': '⚔️ WARRIOR', 'base_req': 3, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
+    'sage': {'display': '🧙 SAGE', 'base_req': 25, 'stat': 'total_words', 'desc': 'Submit {req}+ words'},
+    'phoenix': {'display': '🔥 PHOENIX', 'base_req': 5, 'stat': 'games_played', 'desc': 'Complete {req}+ games'},
+    'shadow': {'display': '🥷🏿 SHADOW', 'base_req': 1, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
     'kami': {'display': '✨ KAMI', 'exclusive': True}
 }
 
@@ -246,6 +246,9 @@ class DatabaseManager:
                 k, s = entry.split(':')
                 if k == title_key:
                     return int(s)
+            elif entry == title_key:
+                # Handle legacy format where just the key exists (implies stage 1)
+                return 1
         return 0
 
     def unlock_title_stage(self, user_id, title_key, stage):
@@ -257,13 +260,11 @@ class DatabaseManager:
         new_unlocked = []
         found = False
         for entry in unlocked:
-            if ':' in entry:
-                k, s = entry.split(':')
-                if k == title_key:
-                    new_unlocked.append(f"{title_key}:{stage}")
-                    found = True
-                else:
-                    new_unlocked.append(entry)
+            k = entry.split(':')[0] if ':' in entry else entry
+            
+            if k == title_key:
+                new_unlocked.append(f"{title_key}:{stage}")
+                found = True
             else:
                 new_unlocked.append(entry)
         
@@ -299,8 +300,8 @@ class DatabaseManager:
         
         # Shadow Special Logic: Strict 3/6/9/12/15 word length
         if title_key == 'shadow':
-            shadow_reqs = {1: 3, 2: 6, 3: 9, 4: 12, 5: 15}
-            return stat_map['longest_word_length'] >= shadow_reqs.get(stage, 15)
+            shadow_reqs = {1: 3, 2: 5, 3: 7, 4: 9, 5: 12}
+            return stat_map['longest_word_length'] >= shadow_reqs.get(stage, 12)
             
         return stat_map.get(title_data['stat'], 0) >= req_val
     
@@ -321,6 +322,10 @@ class DatabaseManager:
     def update_word_stats(self, user_id, username, word, streak=0, forfeit=False):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
+
+        # Update username in both tables to ensure profile sync
+        c.execute("UPDATE leaderboard SET username = ? WHERE user_id = ?", (username, user_id))
+        c.execute("UPDATE chat_members SET username = ? WHERE user_id = ?", (username, user_id))
 
         c.execute("SELECT * FROM leaderboard WHERE user_id=?", (user_id,))
         entry = c.fetchone()
@@ -692,8 +697,19 @@ class GameState:
         return False
 
     def next_turn(self, preserve_challenge=False):
-        self.current_player_index = (self.current_player_index + 1) % len(self.players)
-        self.turn_count += 1
+        # Reset booster usage for the new round
+        self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
+        
+        attempts = 0
+        max_attempts = len(self.players) + 1
+        
+        while attempts < max_attempts:
+            self.current_player_index = (self.current_player_index + 1) % len(self.players)
+            self.turn_count += 1
+            attempts += 1
+            
+            if self.players[self.current_player_index]['id'] not in self.eliminated_players:
+                break
 
         if not preserve_challenge:
             # Randomize challenges based on mode
@@ -898,12 +914,6 @@ async def handle_turn_timeout(chat_id: int, user_id: int, application):
         
         # Find next valid player
         next_player = game.players[game.current_player_index]
-        max_iterations = len(game.players)
-        iterations = 0
-        while next_player['id'] in game.eliminated_players and iterations < max_iterations:
-            game.next_turn()
-            next_player = game.players[game.current_player_index]
-            iterations += 1
         
         if next_player['id'] in game.eliminated_players:
             for player in game.players:
@@ -944,7 +954,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.unlock_title(user.id, 'kami')
     
     await update.message.reply_text(
-        "🎮 <b>Welcome to the Infinite Word Game!</b>\n\n"
+        "🎮 <b>Welcome to the KURIMUZON Word Game!</b>\n\n"
         "📋 <b>Game Commands:</b>\n"
         "/lobby - Open a new game lobby\n"
         "/join - Join the lobby\n"
@@ -1495,6 +1505,12 @@ async def hint_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if game.booster_limits.get('hint', float('inf')) == -1:
         await update.message.reply_text("❌ Hint boosts are disabled for this game!")
         return
+        
+    # Check session limit
+    limit = game.booster_limits.get('hint', float('inf'))
+    if game.booster_usage['hint'] >= limit:
+        await update.message.reply_text(f"❌ Round limit reached! Max {limit} hints per turn.")
+        return
     
     inventory = db.get_inventory(user.id)
     if inventory['hint'] <= 0:
@@ -1504,6 +1520,7 @@ async def hint_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     words = [w for w in game.dictionary if len(w) == game.current_word_length and w.startswith(game.current_start_letter)][:3]
     if words:
         db.use_boost(user.id, 'hint')
+        game.booster_usage['hint'] += 1
         text = f"📖 *Hint\\!* Possible words: {', '.join(words)}"
         await update.message.reply_text(text, parse_mode='MarkdownV2')
     else:
@@ -1529,6 +1546,12 @@ async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if game.booster_limits.get('skip', float('inf')) == -1:
         await update.message.reply_text("❌ Skip boosts are disabled for this game!")
         return
+        
+    # Check session limit
+    limit = game.booster_limits.get('skip', float('inf'))
+    if game.booster_usage['skip'] >= limit:
+        await update.message.reply_text(f"❌ Round limit reached! Max {limit} skips per turn.")
+        return
     
     inventory = db.get_inventory(user.id)
     if inventory['skip'] <= 0:
@@ -1536,6 +1559,7 @@ async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     
     db.use_boost(user.id, 'skip')
+    game.booster_usage['skip'] += 1
     game.cancel_timeout()
     game.next_turn()
     next_player = game.players[game.current_player_index]
@@ -1561,6 +1585,12 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
     if game.booster_limits.get('rebound', float('inf')) == -1:
         await update.message.reply_text("❌ Rebound boosts are disabled for this game!")
         return
+        
+    # Check session limit
+    limit = game.booster_limits.get('rebound', float('inf'))
+    if game.booster_usage['rebound'] >= limit:
+        await update.message.reply_text(f"❌ Round limit reached! Max {limit} rebounds per turn.")
+        return
     
     inventory = db.get_inventory(user.id)
     if inventory['rebound'] <= 0:
@@ -1568,6 +1598,7 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
     
     db.use_boost(user.id, 'rebound')
+    game.booster_usage['rebound'] += 1
     game.cancel_timeout()
     # Pass preserve_challenge=True to keep the same letter and length
     game.next_turn(preserve_challenge=True)
@@ -1643,7 +1674,7 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ You've already claimed your daily reward today! Come back tomorrow.")
         return
     
-    reward = 20
+    reward = random.randint(10, 100)
     db.add_balance(user.id, reward)
     db.update_player_last_daily(user.id, today)
     
@@ -1653,6 +1684,19 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Current Balance: <b>{db.get_balance(user.id)} pts</b>",
         parse_mode='HTML'
     )
+
+async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show group rules"""
+    rules_text = (
+        "📜 <b>GROUP RULES</b> 📜\n\n"
+        "1️⃣ Be respectful to all players.\n"
+        "2️⃣ No spamming or flooding the chat.\n"
+        "3️⃣ Use English for word submissions unless otherwise specified.\n"
+        "4️⃣ Do not use bots or external scripts to play.\n"
+        "5️⃣ Have fun and keep the competition healthy!\n\n"
+        "<i>Violating rules may lead to a permanent ban.</i>"
+    )
+    await update.message.reply_text(rules_text, parse_mode='HTML')
 
 async def donate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Transfer points between players"""
@@ -1767,7 +1811,13 @@ async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += "\n"
         if current_stage < 5:
             next_stage = current_stage + 1
-            req_val = int(title_data['base_req'] * STAGES[next_stage]['multiplier'])
+            
+            if title_key == 'shadow':
+                shadow_reqs = {1: 3, 2: 5, 3: 7, 4: 9, 5: 12}
+                req_val = shadow_reqs.get(next_stage, 12)
+            else:
+                req_val = int(title_data['base_req'] * STAGES[next_stage]['multiplier'])
+                
             desc = title_data['desc'].format(req=req_val)
             text += f"  <i>Next Stage {next_stage}: {desc}</i>\n"
         else:
@@ -1967,6 +2017,9 @@ async def vscpu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Initialize first challenge using next_turn logic to ensure modes apply
     game.next_turn() 
+    
+    # Fix: Ensure it starts with the player, not CPU (since next_turn increments index)
+    game.current_player_index = 0
         
     turn_time = game.get_turn_time()
     game.current_turn_user_id = user.id
@@ -2255,6 +2308,10 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ Error searching for user!")
             return
     
+    # Auto-unlock titles BEFORE fetching stats for display
+    # This ensures the progress bars reflect the latest state
+    db.auto_unlock_titles(target_user_id)
+
     stats = db.get_player_stats(target_user_id)
     if not stats:
         await update.message.reply_text("❌ No stats found for this player!")
@@ -2272,19 +2329,10 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 total_stages += val
             except (ValueError, IndexError):
                 continue
-    
-    unlocked_list = db.get_unlocked_titles(target_user_id)
-    unlocked_stages = {}
-    total_stages = 0
-    for entry in unlocked_list:
-        if ':' in entry:
-            try:
-                k, s = entry.split(':')
-                val = int(s)
-                unlocked_stages[k] = val
-                total_stages += val
-            except (ValueError, IndexError):
-                continue
+        elif entry:
+            # Handle legacy format
+            unlocked_stages[entry] = 1
+            total_stages += 1
 
     # Determine active title and Divine status
     active_key = db.get_active_title(target_user_id)
@@ -2401,9 +2449,6 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f" ┣ 🎮 Games: <code>{stats[3]}</code>\n"
     profile_text += f" ┣ 📏 Longest: <code>{stats[4]}</code> ({stats[5]}L)\n"
     profile_text += f" ┗ 📈 Average: <code>{stats[8]:.1f}</code>\n\n"
-
-    # Auto-unlock titles on every profile view to ensure progress is tracked
-    db.auto_unlock_titles(target_user_id)
     
     if not is_kami:
         profile_text += f"🏆 <b>MASTERY LEVELS</b>\n"
@@ -2522,9 +2567,49 @@ async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tag_msg += " ".join(list(set(usernames))) # Unique tags
     
     custom_msg = " ".join(context.args) if context.args else "Wake up! A new challenge awaits!"
-    help_text += f"\n\n💬 {custom_msg}"
+    tag_msg += f"\n\n💬 {custom_msg}"
     
     await update.message.reply_text(tag_msg, parse_mode='HTML')
+
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reset user progress completely"""
+    user = update.effective_user
+    
+    # Check for confirmation
+    if not context.args or context.args[0].lower() != "confirm":
+        await update.message.reply_text(
+            "⚠️ <b>WARNING: RESETTING PROFILE</b> ⚠️\n\n"
+            "This will permanently delete:\n"
+            "• All stats (score, words, games)\n"
+            "• Shop inventory & balance\n"
+            "• Unlocked titles & achievements\n"
+            "• Streaks & records\n\n"
+            "To confirm, type: <code>/reset confirm</code>",
+            parse_mode='HTML'
+        )
+        return
+
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    try:
+        # Delete from all tables
+        c.execute("DELETE FROM leaderboard WHERE user_id=?", (user.id,))
+        c.execute("DELETE FROM inventory WHERE user_id=?", (user.id,))
+        c.execute("DELETE FROM titles WHERE user_id=?", (user.id,))
+        # Optional: c.execute("DELETE FROM permissions WHERE user_id=?", (user.id,)) 
+        
+        conn.commit()
+        await update.message.reply_text(
+            "🔄 <b>PROFILE RESET COMPLETE</b>\n\n"
+            "Your game data has been wiped. You are now starting fresh!",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        logger.error(f"Error resetting user {user.id}: {e}")
+        await update.message.reply_text("❌ An error occurred while resetting your profile.")
+    finally:
+        conn.close()
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Complete gameplay guide and rules"""
@@ -2637,11 +2722,6 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Authority command error: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Error! Use: /authority hint=2 skip=1 rebound=0")
 
-    except Exception as e:
-        logger.error(f"Error processing word '{word}': {str(e)}", exc_info=True)
-        await update.message.reply_text(f"❌ Error processing your word. Try again.")
-        game.used_words.discard(word)
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Main message handler for word game and member tracking"""
     if is_message_stale(update): return
@@ -2678,6 +2758,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_user_id = str(user.id)
     target_user_id = str(current_player['id'])
 
+    # Track username update
+    username = user.username or user.first_name or "Player"
+    db.ensure_player_exists(user.id, username)
+    
+    # Authority limits check
     if msg_user_id != target_user_id:
         # Prevent "Turn Stealing" - Log attempts from other players
         active_ids = [str(p['id']) for p in game.players if p['id'] not in game.eliminated_players]
@@ -2726,11 +2811,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check for newly unlocked titles after stats update
     newly_unlocked = db.auto_unlock_titles(user.id)
     if newly_unlocked:
-        unlock_msg = "🎉 <b>NEW TITLES UNLOCKED!</b>\n\n"
-        for title_key in newly_unlocked:
-            if title_key in TITLES:
-                unlock_msg += f"✨ {TITLES[title_key]['display']}\n"
-        await update.message.reply_text(unlock_msg, parse_mode='HTML')
+        unlock_msg = "🏆 <b>NEW TITLES UNLOCKED!</b>\n\n"
+        for title_key, stage in newly_unlocked:
+            title_info = TITLES[title_key]
+            stage_info = STAGES[stage]
+            multiplier = stage_info['multiplier']
+            unlock_msg += (
+                f"{stage_info['color']} <b>{title_info['display']} {stage_info['display']}</b>\n"
+                f"<i>Requirement met! Multiplier: {multiplier}x</i>\n\n"
+            )
+        await application.bot.send_message(
+            chat_id=chat_id,
+            text=unlock_msg,
+            parse_mode='HTML'
+        )
 
     difficulty_increased = game.next_turn()
     
@@ -2810,6 +2904,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("setbio", setbio_command))
                 application.add_handler(CommandHandler("donate", donate_command))
                 application.add_handler(CommandHandler("daily", daily_command))
+                application.add_handler(CommandHandler("rules", rules_command))
                 application.add_handler(CommandHandler("authority", authority_command))
                 application.add_handler(CommandHandler("achievements", achievements_command))
                 application.add_handler(CommandHandler("settitle", settitle_command))
@@ -2824,6 +2919,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("grant", grant_permission))
                 application.add_handler(CommandHandler("revoke", grant_permission))
                 application.add_handler(CommandHandler("setbalpic", setbalpic_command))
+                application.add_handler(CommandHandler("reset", reset_command))
                 application.add_handler(MessageHandler(filters.Regex(r'^\.tagall'), tagall_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
