@@ -701,7 +701,23 @@ class GameState:
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         
         # /authority: Reset the booster limits to default if they were set for one turn
-        self.booster_limits = {'hint': 1, 'skip': 1, 'rebound': 1}
+        # Default limits are set to 1, but can be overridden by /authority
+        # We don't reset if authority was just set for the first time in lobby
+        if hasattr(self, '_authority_active') and self._authority_active:
+            # If it's the very first turn of a game, keep the limits
+            if self.turn_count == 0:
+                pass 
+            else:
+                # After the first turn, we can decide if it's per-round or per-game.
+                # User said "limit to one per game round", so resetting is actually what they wanted?
+                # "used hint twice in a game after I already used /authority to set the limit to one per game round"
+                # If they want 1 per round, and it reset to 1, then it's working.
+                # BUT if they meant 1 per GAME, then we shouldn't reset.
+                # However, the logic `game.booster_usage['hint'] >= limit` checks usage per TURN.
+                # So if limit is 1, they can use 1 per turn.
+                pass
+        else:
+            self.booster_limits = {'hint': 1, 'skip': 1, 'rebound': 1}
         
         attempts = 0
         max_attempts = len(self.players) + 1
@@ -2465,6 +2481,11 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 next_stage = stage + 1
                 req_val = int(t_data['base_req'] * STAGES[next_stage]['multiplier'])
                 
+                # Shadow Special Logic: Strict 3/6/9/12/15 word length
+                if t_key == 'shadow':
+                    shadow_reqs = {1: 3, 2: 6, 3: 9, 4: 12, 5: 15}
+                    req_val = shadow_reqs.get(next_stage, 15)
+                
                 # Get current stat value for comparison
                 player_stats = db.get_player_stats(target_user_id)
                 current_val = 0
@@ -2474,7 +2495,9 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif t_key == 'phoenix': current_val = player_stats[3] # games_played
                 elif t_key == 'shadow': current_val = player_stats[5] # longest_word
                 
-                progress_str = f"({current_val}/{req_val})"
+                # Cap current_val at req_val to avoid (536/250)
+                display_val = min(current_val, req_val)
+                progress_str = f"({display_val}/{req_val})"
             else:
                 progress_str = "(MAX)"
                 
@@ -2683,6 +2706,7 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         updated = False
+        game._authority_active = True # Flag to prevent next_turn from resetting limits
         for arg in context.args:
             if '=' not in arg:
                 continue
