@@ -700,6 +700,9 @@ class GameState:
         # Reset booster usage for the new round
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         
+        # /authority: Reset the booster limits to default if they were set for one turn
+        self.booster_limits = {'hint': 1, 'skip': 1, 'rebound': 1}
+        
         attempts = 0
         max_attempts = len(self.players) + 1
         
