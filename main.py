@@ -287,7 +287,6 @@ class DatabaseManager:
             return False
             
         title_data = TITLES[title_key]
-        req_val = int(title_data['base_req'] * STAGES[stage]['multiplier'])
         
         # stats mapping: 2: total_words, 3: games_played, 5: longest_word_length, 6: best_streak, 7: total_score
         stat_map = {
@@ -303,6 +302,7 @@ class DatabaseManager:
             shadow_reqs = {1: 3, 2: 6, 3: 9, 4: 12, 5: 15}
             return stat_map['longest_word_length'] >= shadow_reqs.get(stage, 15)
             
+        req_val = int(title_data['base_req'] * STAGES[stage]['multiplier'])
         return stat_map.get(title_data['stat'], 0) >= req_val
     
     def auto_unlock_titles(self, user_id):
@@ -371,6 +371,9 @@ class DatabaseManager:
 
         conn.commit()
         conn.close()
+        
+        # Auto-unlock titles immediately after word submission
+        self.auto_unlock_titles(user_id)
 
     def is_user_omnipotent(self, user_id):
         """Check if user has omnipotent permissions"""
@@ -2479,12 +2482,13 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Progress tracking (X/Y)
             if stage < 5:
                 next_stage = stage + 1
-                req_val = int(t_data['base_req'] * STAGES[next_stage]['multiplier'])
                 
                 # Shadow Special Logic: Strict 3/6/9/12/15 word length
                 if t_key == 'shadow':
                     shadow_reqs = {1: 3, 2: 6, 3: 9, 4: 12, 5: 15}
                     req_val = shadow_reqs.get(next_stage, 15)
+                else:
+                    req_val = int(t_data['base_req'] * STAGES[next_stage]['multiplier'])
                 
                 # Get current stat value for comparison
                 player_stats = db.get_player_stats(target_user_id)
