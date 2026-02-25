@@ -2495,7 +2495,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif t_key == 'warrior': current_val = player_stats[6] # best_streak
                 elif t_key == 'sage': current_val = player_stats[2] # total_words
                 elif t_key == 'phoenix': current_val = player_stats[3] # games_played
-                elif t_key == 'shadow': current_val = player_stats[5] # longest_word
+                elif t_key == 'shadow': current_val = player_stats[5] # longest_word_length
                 
                 # Cap current_val at req_val to avoid (536/250)
                 display_val = min(current_val, req_val)
