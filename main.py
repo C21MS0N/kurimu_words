@@ -69,10 +69,10 @@ BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env 
 # Available Titles with Dynamic Requirements (Multi-Stage)
 STAGES = {
     1: {'display': 'Ⅰ', 'color': '🪵', 'multiplier': 1},
-    2: {'display': 'Ⅱ', 'color': '🟤', 'multiplier': 5},
-    3: {'display': 'Ⅲ', 'color': '🔘', 'multiplier': 10},
-    4: {'display': 'Ⅳ', 'color': '🪙', 'multiplier': 20},
-    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 35},
+    2: {'display': 'Ⅱ', 'color': '🟤', 'multiplier': 2},
+    3: {'display': 'Ⅲ', 'color': '🔘', 'multiplier': 4},
+    4: {'display': 'Ⅳ', 'color': '🪙', 'multiplier': 8},
+    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 15},
 }
 
 TITLES = {
@@ -2469,41 +2469,40 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f" ┣ 🎮 Games: <code>{stats[3]}</code>\n"
     profile_text += f" ┣ 📏 Longest: <code>{stats[4]}</code> ({stats[5]}L)\n"
     profile_text += f" ┗ 📈 Average: <code>{stats[8]:.1f}</code>\n\n"
-    
+
     if not is_kami:
         profile_text += f"🏆 <b>MASTERY LEVELS</b>\n"
         for t_key, t_data in TITLES.items():
             if t_data.get('exclusive'): continue
             
-            stage = unlocked_stages.get(t_key, 0)
+            # Use current stage to show next goal
+            current_s = db.get_title_stage(target_user_id, t_key)
             
             # Progress tracking (X/Y)
-            if stage < 5:
-                next_stage = stage + 1
+            if current_s < 5:
+                next_stage = current_s + 1
                 
-                # Shadow Special Logic: Strict 3/6/9/12/15 word length
+                # Shadow Special Logic
                 if t_key == 'shadow':
                     shadow_reqs = {1: 3, 2: 6, 3: 9, 4: 12, 5: 15}
                     req_val = shadow_reqs.get(next_stage, 15)
                 else:
                     req_val = int(t_data['base_req'] * STAGES[next_stage]['multiplier'])
                 
-                # Get current stat value for comparison
                 player_stats = db.get_player_stats(target_user_id)
                 current_val = 0
-                if t_key == 'legend': current_val = player_stats[7] # total_score
-                elif t_key == 'warrior': current_val = player_stats[6] # best_streak
-                elif t_key == 'sage': current_val = player_stats[2] # total_words
-                elif t_key == 'phoenix': current_val = player_stats[3] # games_played
-                elif t_key == 'shadow': current_val = player_stats[5] # longest_word_length
+                if t_key == 'legend': current_val = player_stats[7]
+                elif t_key == 'warrior': current_val = player_stats[6]
+                elif t_key == 'sage': current_val = player_stats[2]
+                elif t_key == 'phoenix': current_val = player_stats[3]
+                elif t_key == 'shadow': current_val = player_stats[5]
                 
-                # Cap current_val at req_val to avoid (536/250)
                 display_val = min(current_val, req_val)
                 progress_str = f"({display_val}/{req_val})"
             else:
                 progress_str = "(MAX)"
                 
-            bar = "▰" * stage + "▱" * (5 - stage)
+            bar = "▰" * current_s + "▱" * (5 - current_s)
             profile_text += f" {t_data['display'][:2]} {bar} <code>{progress_str}</code>\n"
     else:
         profile_text += f"🌌 <b>CELESTIAL MASTERY</b>\n"
