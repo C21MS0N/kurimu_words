@@ -76,11 +76,11 @@ STAGES = {
 }
 
 TITLES = {
-    'legend': {'display': '👑 LEGEND', 'base_req': 500, 'stat': 'total_score', 'desc': 'Reach {req} total points'},
-    'warrior': {'display': '⚔️ WARRIOR', 'base_req': 5, 'stat': 'best_streak', 'desc': 'Achieve {req}+ word streak'},
-    'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req}+ words'},
-    'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req}+ games'},
-    'shadow': {'display': '🥷🏿 SHADOW', 'base_req': 1, 'stat': 'longest_word_length', 'desc': 'Find a {req}+ letter word'},
+    'legend': {'display': '👑 LEGEND', 'base_req': 500, 'stat': 'total_score', 'desc': 'Reach {req} total score'},
+    'warrior': {'display': '⚔️ WARRIOR', 'base_req': 5, 'stat': 'best_streak', 'desc': 'Achieve a {req} word streak'},
+    'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req} total words'},
+    'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req} total games'},
+    'shadow': {'display': '🥷🏿 SHADOW', 'base_req': 1, 'stat': 'longest_word_length', 'desc': 'Find a {req} letter word'},
     'kami': {'display': '✨ KAMI', 'exclusive': True}
 }
 
@@ -241,15 +241,15 @@ class DatabaseManager:
     
     def get_title_stage(self, user_id, title_key):
         unlocked = self.get_unlocked_titles(user_id)
+        max_stage = 0
         for entry in unlocked:
             if ':' in entry:
                 k, s = entry.split(':')
                 if k == title_key:
-                    return int(s)
+                    max_stage = max(max_stage, int(s))
             elif entry == title_key:
-                # Handle legacy format where just the key exists (implies stage 1)
-                return 1
-        return 0
+                max_stage = max(max_stage, 1)
+        return max_stage
 
     def unlock_title_stage(self, user_id, title_key, stage):
         conn = sqlite3.connect(self.db_name)
@@ -300,7 +300,8 @@ class DatabaseManager:
         # Shadow Special Logic: Strict 3/6/9/12/15 word length
         if title_key == 'shadow':
             shadow_reqs = {1: 3, 2: 6, 3: 9, 4: 12, 5: 15}
-            return stat_map['longest_word_length'] >= shadow_reqs.get(stage, 15)
+            req_val = shadow_reqs.get(stage, 15)
+            return stat_map['longest_word_length'] >= req_val
             
         req_val = int(title_data['base_req'] * STAGES[stage]['multiplier'])
         return stat_map.get(title_data['stat'], 0) >= req_val
@@ -703,23 +704,10 @@ class GameState:
         # Reset booster usage for the new round
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         
-        # /authority: Reset the booster limits to default if they were set for one turn
-        # Default limits are set to 1, but can be overridden by /authority
-        # We don't reset if authority was just set for the first time in lobby
-        if hasattr(self, '_authority_active') and self._authority_active:
-            # If it's the very first turn of a game, keep the limits
-            if self.turn_count == 0:
-                pass 
-            else:
-                # After the first turn, we can decide if it's per-round or per-game.
-                # User said "limit to one per game round", so resetting is actually what they wanted?
-                # "used hint twice in a game after I already used /authority to set the limit to one per game round"
-                # If they want 1 per round, and it reset to 1, then it's working.
-                # BUT if they meant 1 per GAME, then we shouldn't reset.
-                # However, the logic `game.booster_usage['hint'] >= limit` checks usage per TURN.
-                # So if limit is 1, they can use 1 per turn.
-                pass
-        else:
+        # /authority: Reset the booster limits only if NOT set by /authority
+        # When /authority is used, limits persist for the entire game (not per-round)
+        # Default behavior without /authority: limits reset to 1 per round
+        if not hasattr(self, '_authority_active') or not self._authority_active:
             self.booster_limits = {'hint': 1, 'skip': 1, 'rebound': 1}
         
         attempts = 0
@@ -1779,7 +1767,9 @@ async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYP
     for entry in unlocked_list:
         if ':' in entry:
             k, s = entry.split(':')
-            unlocked_stages[k] = int(s)
+            unlocked_stages[k] = max(unlocked_stages.get(k, 0), int(s))
+        elif entry:
+            unlocked_stages[entry] = max(unlocked_stages.get(entry, 0), 1)
             
     active = db.get_active_title(user.id)
     
@@ -1817,7 +1807,9 @@ async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for entry in unlocked_list:
         if ':' in entry:
             k, s = entry.split(':')
-            unlocked_stages[k] = int(s)
+            unlocked_stages[k] = max(unlocked_stages.get(k, 0), int(s))
+        elif entry:
+            unlocked_stages[entry] = max(unlocked_stages.get(entry, 0), 1)
             
     text = "📊 <b>Title Progress & Requirements</b>\n\n"
     for title_key, title_data in TITLES.items():
@@ -1971,13 +1963,13 @@ async def settitle_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ {TITLES[title]['display']} is exclusive to the bot owner!")
         return
     
-    unlocked = db.get_unlocked_titles(user.id)
+    unlocked_stage = db.get_title_stage(user.id, title)
     
-    if title not in unlocked:
+    if unlocked_stage == 0:
         can_unlock = db.check_title_unlock(user.id, title)
         if not can_unlock:
-            req = TITLE_REQUIREMENTS.get(title, {})
-            await update.message.reply_text(f"❌ Requirements not met!\n{req.get('desc', '')}\n\nUse /progress to see your status")
+            req = TITLES.get(title, {})
+            await update.message.reply_text(f"❌ Requirements not met!\n{req.get('desc', '').format(req=req.get('base_req', ''))}\n\nUse /progress to see your status")
             return
         db.unlock_title(user.id, title)
     
@@ -2347,14 +2339,20 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 k, s = entry.split(':')
                 val = int(s)
-                unlocked_stages[k] = val
-                total_stages += val
+                if k in unlocked_stages:
+                    if val > unlocked_stages[k]:
+                        total_stages += (val - unlocked_stages[k])
+                        unlocked_stages[k] = val
+                else:
+                    unlocked_stages[k] = val
+                    total_stages += val
             except (ValueError, IndexError):
                 continue
         elif entry:
             # Handle legacy format
-            unlocked_stages[entry] = 1
-            total_stages += 1
+            if entry not in unlocked_stages:
+                unlocked_stages[entry] = 1
+                total_stages += 1
 
     # Determine active title and Divine status
     active_key = db.get_active_title(target_user_id)
@@ -2467,7 +2465,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"📊 <b>STATISTICS</b>\n"
     profile_text += f" ┣ 🎯 Score: <code>{stats[7]}</code>\n"
     profile_text += f" ┣ 📝 Words: <code>{stats[2]}</code>\n"
-    profile_text += f" ┣ ⚡ Streak: <code>{stats[6]}</code>\n"
+    profile_text += f" ┣ 🔥 Streak: <code>{stats[6]}</code>\n"
     profile_text += f" ┣ 🎮 Games: <code>{stats[3]}</code>\n"
     profile_text += f" ┣ 📏 Longest: <code>{stats[4]}</code> ({stats[5]}L)\n"
     profile_text += f" ┗ 📈 Average: <code>{stats[8]:.1f}</code>\n\n"
@@ -2703,7 +2701,7 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📋 <b>Usage:</b> /authority hint=X skip=Y rebound=Z\n\n"
             "<b>Example:</b> /authority hint=2 skip=1 rebound=0\n\n"
-            "Sets max boosters per round. 0 = unlimited",
+            "Sets max boosters per round. 0 = disabled, inf = unlimited",
             parse_mode='HTML'
         )
         return
