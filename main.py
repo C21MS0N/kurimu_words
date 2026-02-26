@@ -71,12 +71,12 @@ STAGES = {
     1: {'display': 'Ⅰ', 'color': '🪵', 'multiplier': 1},
     2: {'display': 'Ⅱ', 'color': '🟤', 'multiplier': 2},
     3: {'display': 'Ⅲ', 'color': '🔘', 'multiplier': 4},
-    4: {'display': 'Ⅳ', 'color': '🪙', 'multiplier': 8},
-    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 15},
+    4: {'display': 'Ⅳ', 'color': '🪙', 'multiplier': 5.5},
+    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 7},
 }
 
 TITLES = {
-    'legend': {'display': '👑 LEGEND', 'base_req': 500, 'stat': 'total_score', 'desc': 'Reach {req} total score'},
+    'legend': {'display': '👑 LEGEND', 'base_req': 350, 'stat': 'total_score', 'desc': 'Reach {req} total score'},
     'warrior': {'display': '⚔️ WARRIOR', 'base_req': 5, 'stat': 'best_streak', 'desc': 'Achieve a {req} word streak'},
     'sage': {'display': '🧙 SAGE', 'base_req': 50, 'stat': 'total_words', 'desc': 'Submit {req} total words'},
     'phoenix': {'display': '🔥 PHOENIX', 'base_req': 10, 'stat': 'games_played', 'desc': 'Complete {req} total games'},
@@ -634,7 +634,7 @@ class GameState:
         self.rebound_target_length: Optional[int] = None
         
         self.group_owner: Optional[int] = None
-        self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
+        self.booster_limits = {'hint': 1, 'skip': 1, 'rebound': 1}
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         self.is_practice: bool = False
         self.is_cpu_game: bool = False
@@ -684,8 +684,10 @@ class GameState:
         self.difficulty_level = 0
         self.turn_start_time = None
         self.group_owner = None
-        self.booster_limits = {'hint': float('inf'), 'skip': float('inf'), 'rebound': float('inf')}
+        self.booster_limits = {'hint': 1, 'skip': 1, 'rebound': 1}
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
+        if hasattr(self, '_authority_settings_applied'):
+            delattr(self, '_authority_settings_applied')
         if self.timeout_task:
             self.timeout_task.cancel()
             self.timeout_task = None
@@ -700,15 +702,18 @@ class GameState:
             return True
         return False
 
+    # Reset booster usage and limits for the new round
     def next_turn(self, preserve_challenge=False):
-        # Reset booster usage for the new round
         self.booster_usage = {'hint': 0, 'skip': 0, 'rebound': 0}
         
-        # /authority: Reset the booster limits only if NOT set by /authority
-        # When /authority is used, limits persist for the entire game (not per-round)
-        # Default behavior without /authority: limits reset to 1 per round
-        if not hasattr(self, '_authority_active') or not self._authority_active:
+        # Reset limits to default 1 unless changed by /authority
+        # If /authority was used, we let it persist for the game
+        if not hasattr(self, '_authority_settings_applied') or not self._authority_settings_applied:
             self.booster_limits = {'hint': 1, 'skip': 1, 'rebound': 1}
+        
+        # Special check: If someone used /authority and then game ended/restarted,
+        # GameState.__init__ or GameState.reset() should handle it, 
+        # but next_turn runs during the game.
         
         attempts = 0
         max_attempts = len(self.players) + 1
@@ -1512,14 +1517,14 @@ async def hint_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❌ It's not your turn!")
         return
     
-    if game.booster_limits.get('hint', float('inf')) == -1:
+    if game.booster_limits.get('hint', 1) == -1:
         await update.message.reply_text("❌ Hint boosts are disabled for this game!")
         return
         
-    # Check session limit
-    limit = game.booster_limits.get('hint', float('inf'))
+    # Check turn limit
+    limit = game.booster_limits.get('hint', 1)
     if game.booster_usage['hint'] >= limit:
-        await update.message.reply_text(f"❌ Round limit reached! Max {limit} hints per turn.")
+        await update.message.reply_text(f"❌ Turn limit reached! Max {limit} hints per turn.")
         return
     
     inventory = db.get_inventory(user.id)
@@ -1553,14 +1558,14 @@ async def skip_boost_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❌ It's not your turn!")
         return
     
-    if game.booster_limits.get('skip', float('inf')) == -1:
+    if game.booster_limits.get('skip', 1) == -1:
         await update.message.reply_text("❌ Skip boosts are disabled for this game!")
         return
         
-    # Check session limit
-    limit = game.booster_limits.get('skip', float('inf'))
+    # Check turn limit
+    limit = game.booster_limits.get('skip', 1)
     if game.booster_usage['skip'] >= limit:
-        await update.message.reply_text(f"❌ Round limit reached! Max {limit} skips per turn.")
+        await update.message.reply_text(f"❌ Turn limit reached! Max {limit} skips per turn.")
         return
     
     inventory = db.get_inventory(user.id)
@@ -1592,14 +1597,14 @@ async def rebound_boost_command(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("❌ It's not your turn!")
         return
     
-    if game.booster_limits.get('rebound', float('inf')) == -1:
+    if game.booster_limits.get('rebound', 1) == -1:
         await update.message.reply_text("❌ Rebound boosts are disabled for this game!")
         return
         
-    # Check session limit
-    limit = game.booster_limits.get('rebound', float('inf'))
+    # Check turn limit
+    limit = game.booster_limits.get('rebound', 1)
     if game.booster_usage['rebound'] >= limit:
-        await update.message.reply_text(f"❌ Round limit reached! Max {limit} rebounds per turn.")
+        await update.message.reply_text(f"❌ Turn limit reached! Max {limit} rebounds per turn.")
         return
     
     inventory = db.get_inventory(user.id)
@@ -2668,90 +2673,49 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text, parse_mode='HTML')
 
 async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """New simplified Authority system for lobby owners"""
     chat_id = update.effective_chat.id
     user = update.effective_user
     
     if chat_id not in games:
-        await update.message.reply_text(
-            "❌ No lobby open! Steps:\n"
-            "1. Type /lobby\n"
-            "2. Then use /authority hint=2 skip=1 rebound=0",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text("❌ No active game session found.")
         return
     
     game = games[chat_id]
-    
-    if not game.is_lobby_open and not game.is_running:
-        await update.message.reply_text(
-            "❌ No active lobby! Type /lobby first.",
-            parse_mode='HTML'
-        )
-        return
-    
     if game.group_owner != user.id:
+        await update.message.reply_text("❌ Only the lobby owner can use /authority!")
+        return
+
+    if not context.args or len(context.args) < 2:
         await update.message.reply_text(
-            f"❌ Only the lobby owner can use /authority!",
+            "🛠 <b>Lobby Authority</b>\n\n"
+            "Usage: <code>/authority [hint/skip/rebound] [limit]</code>\n"
+            "Example: <code>/authority hint 1</code>\n"
+            "• Use 0 to disable a booster\n"
+            "• Use 'inf' for unlimited usage",
             parse_mode='HTML'
         )
         return
-    
-    if not context.args or len(context.args) == 0:
-        await update.message.reply_text(
-            "📋 <b>Usage:</b> /authority hint=X skip=Y rebound=Z\n\n"
-            "<b>Example:</b> /authority hint=2 skip=1 rebound=0\n\n"
-            "Sets max boosters per round. 0 = disabled, inf = unlimited",
-            parse_mode='HTML'
-        )
+
+    booster = context.args[0].lower()
+    value_str = context.args[1].lower()
+
+    if booster not in ['hint', 'skip', 'rebound']:
+        await update.message.reply_text("❌ Invalid booster type! Use: hint, skip, or rebound.")
         return
-    
+
     try:
-        updated = False
-        game._authority_active = True # Flag to prevent next_turn from resetting limits
-        for arg in context.args:
-            if '=' not in arg:
-                continue
-            key, value_str = arg.split('=', 1)
-            key = key.strip().lower()
-            value_str = value_str.strip().lower()
-            
-            if key not in game.booster_limits:
-                continue
-            
-            if value_str == 'null' or value_str == 'none':
-                game.booster_limits[key] = -1
-                updated = True
-            elif value_str == 'inf' or value_str == 'unlimited':
-                game.booster_limits[key] = float('inf')
-                updated = True
-            elif value_str.isdigit():
-                val = int(value_str)
-                if val == 0:
-                    game.booster_limits[key] = float('inf')
-                else:
-                    game.booster_limits[key] = val
-                updated = True
+        game._authority_settings_applied = True # Flag to persist these limits for the current game
+        if value_str == 'inf' or value_str == 'unlimited':
+            game.booster_limits[booster] = float('inf')
+        else:
+            limit = int(value_str)
+            game.booster_limits[booster] = limit if limit > 0 else -1
         
-        if not updated:
-            await update.message.reply_text(f"❌ Invalid format! Use: /authority hint=2 skip=1 rebound=null")
-            return
-        
-        limits_text = ""
-        for booster, limit in sorted(game.booster_limits.items()):
-            if limit == -1:
-                limits_text += f"  • {booster.capitalize()}: ❌ Disabled\n"
-            elif limit == float('inf'):
-                limits_text += f"  • {booster.capitalize()}: Unlimited\n"
-            else:
-                limits_text += f"  • {booster.capitalize()}: {int(limit)} max\n"
-        
-        await update.message.reply_text(
-            f"✅ <b>Booster Limits Set!</b>\n\n{limits_text}",
-            parse_mode='HTML'
-        )
-    except Exception as e:
-        logger.error(f"Authority command error: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Error! Use: /authority hint=2 skip=1 rebound=0")
+        status = "Unlimited" if game.booster_limits[booster] == float('inf') else ("Disabled" if game.booster_limits[booster] == -1 else f"{game.booster_limits[booster]} per turn")
+        await update.message.reply_text(f"✅ <b>Authority Updated:</b> {booster.capitalize()} is now set to <b>{status}</b>.", parse_mode='HTML')
+    except ValueError:
+        await update.message.reply_text("❌ Invalid limit! Please provide a number or 'inf'.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Main message handler for word game and member tracking"""
