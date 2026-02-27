@@ -71,8 +71,8 @@ BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env 
         1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 1},
         2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 2},
         3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 4},
-        4: {'display': 'Ⅳ', 'color': '🟣', 'multiplier': 8},
-        5: {'display': 'Ⅴ', 'color': '🔴', 'multiplier': 15},
+        4: {'display': 'Ⅳ', 'color': '🟣', 'multiplier': 5},
+        5: {'display': 'Ⅴ', 'color': '🔴', 'multiplier': 6.5},
     }
 
 TITLES = {
