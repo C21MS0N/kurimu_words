@@ -66,14 +66,14 @@ CHALLENGE_SEQUENCE = [
 # Bot Owner (for exclusive KAMI title) - Set via environment variable or hardcode here
 BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env var to your Telegram user ID
 
-# Available Titles with Dynamic Requirements (Multi-Stage)
-STAGES = {
-    1: {'display': 'Ⅰ', 'color': '🪵', 'multiplier': 1},
-    2: {'display': 'Ⅱ', 'color': '🟤', 'multiplier': 2},
-    3: {'display': 'Ⅲ', 'color': '🔘', 'multiplier': 4},
-    4: {'display': 'Ⅳ', 'color': '🪙', 'multiplier': 5.5},
-    5: {'display': 'Ⅴ', 'color': '💎', 'multiplier': 7},
-}
+    # STAGES multipliers
+    STAGES = {
+        1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 1},
+        2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 2},
+        3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 4},
+        4: {'display': 'Ⅳ', 'color': '🟣', 'multiplier': 8},
+        5: {'display': 'Ⅴ', 'color': '🔴', 'multiplier': 15},
+    }
 
 TITLES = {
     'legend': {'display': '👑 LEGEND', 'base_req': 350, 'stat': 'total_score', 'desc': 'Reach {req} total score'},
@@ -134,6 +134,12 @@ class DatabaseManager:
         # Migration for existing inventory table
         try:
             c.execute("ALTER TABLE inventory ADD COLUMN bal_photo_count INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            c.execute("ALTER TABLE leaderboard ADD COLUMN ban_expiry TEXT")
+            c.execute("ALTER TABLE leaderboard ADD COLUMN is_banned INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass
 
@@ -467,7 +473,54 @@ class DatabaseManager:
         result = c.fetchone()
         conn.close()
         return result[0] if result else 0
-    
+
+    def is_user_banned(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("SELECT is_banned, ban_expiry FROM leaderboard WHERE user_id=?", (user_id,))
+        result = c.fetchone()
+        conn.close()
+        if not result or not result[0]:
+            return False, None
+        
+        expiry_str = result[1]
+        if not expiry_str: # Permanent ban
+            return True, None
+            
+        expiry = datetime.fromisoformat(expiry_str)
+        if datetime.now() > expiry:
+            # Auto-unban
+            self.unban_user(user_id)
+            return False, None
+        return True, expiry
+
+    def ban_user(self, user_id, minutes=None):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        expiry = None
+        if minutes:
+            expiry = (datetime.now() + timedelta(minutes=minutes)).isoformat()
+        
+        c.execute("UPDATE leaderboard SET is_banned = 1, ban_expiry = ? WHERE user_id = ?", (expiry, user_id))
+        conn.commit()
+        conn.close()
+
+    def unban_user(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("UPDATE leaderboard SET is_banned = 0, ban_expiry = NULL WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+
+    def deduct_balance(self, user_id, amount):
+        conn = sqlite3.connect(self.db_name)
+        c = conn.cursor()
+        c.execute("UPDATE inventory SET balance = balance - ? WHERE user_id = ? AND balance >= ?", (amount, user_id, amount))
+        success = c.rowcount > 0
+        conn.commit()
+        conn.close()
+        return success
+
     def get_player_last_daily(self, user_id):
         conn = sqlite3.connect(self.db_name)
         c = conn.cursor()
@@ -1915,7 +1968,10 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text += f"{profile_header}\n"
     text += f"{beauty_border}\n\n"
     
-    text += f"👤 <b>𝐍𝐚𝐦𝐞:</b> <code>{target_user.first_name}</code>\n"
+    text += f"👤 <b>𝐍𝐚𝐦𝐞:</b> <code>{target_username}</code>\n"
+    if target_banned:
+        ban_text = f" (Banned until {target_expiry.strftime('%m/%d %H:%M')})" if target_expiry else " (Permanently Banned)"
+        text += f"🚫 <b>𝐒𝐭𝐚𝐭𝐮𝐬:</b> <code>Banned{ban_text}</code>\n"
     if title_display:
         text += f"🎖️ <b>𝐓𝐢𝐭𝐥𝐞:</b> {title_display}\n"
     text += f"💰 <b>𝐁𝐚𝐥𝐚𝐧𝐜𝐞:</b> <code>{db.get_balance(target_user.id)}</code> pts\n\n"
@@ -2329,6 +2385,13 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ Error searching for user!")
             return
     
+    if is_banned:
+        if expiry:
+            await update.message.reply_text(f"🚫 You are currently banned from playing! Expiry: {expiry.strftime('%Y-%m-%d %H:%M')}\n\nYou can pay a 200 point fine to unban immediately with /payfine")
+        else:
+            await update.message.reply_text("🚫 You are permanently banned from playing!\n\nYou can pay a 200 point fine to unban immediately with /payfine")
+        return
+
     # Auto-unlock titles BEFORE fetching stats for display
     # This ensures the progress bars reflect the latest state
     db.auto_unlock_titles(target_user_id)
@@ -2365,6 +2428,9 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     active_key = db.get_active_title(target_user_id)
     title_display = ""
     is_kami = False
+    
+    # Check if target user is banned
+    target_banned, target_expiry = db.is_user_banned(target_user_id)
     
     # Title Themes Definition
     TITLE_THEMES = {
@@ -2450,6 +2516,12 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f"<code>{beauty_border}</code>\n\n"
     
     profile_text += f"<b>NAME:</b> <code>{target_username}</code>\n"
+    
+    # Show Ban Status in Profile
+    if target_banned:
+        ban_msg = f" (Expires: {target_expiry.strftime('%Y-%m-%d %H:%M')})" if target_expiry else " (Permanent)"
+        profile_text += f"🚫 <b>𝐒𝐭𝐚𝐭𝐮𝐬:</b> <code>BANNED{ban_msg}</code>\n"
+        
     if title_display:
         profile_text += f"<b>TITLE:</b> {title_display}\n"
     else:
@@ -2729,6 +2801,62 @@ async def authority_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("❌ Invalid limit! Please provide a number or 'inf'.")
 
+async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ban a user from playing (Admin only)"""
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    # Check if user is admin
+    chat_member = await context.bot.get_chat_member(chat_id, user.id)
+    if chat_member.status not in ['creator', 'administrator'] and user.id != BOT_OWNER_ID:
+        await update.message.reply_text("❌ Only group admins can use /ban!")
+        return
+
+    if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
+        await update.message.reply_text("❌ Reply to a user's message with /ban [minutes] to ban them.")
+        return
+
+    target = update.message.reply_to_message.from_user
+    minutes = None
+    if context.args and context.args[0].isdigit():
+        minutes = int(context.args[0])
+
+    db.ban_user(target.id, minutes)
+    duration = f"for {minutes} minutes" if minutes else "permanently"
+    await update.message.reply_text(f"🚫 User @{target.username} has been banned {duration} from playing.")
+
+async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Unban a user (Admin only)"""
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    
+    chat_member = await context.bot.get_chat_member(chat_id, user.id)
+    if chat_member.status not in ['creator', 'administrator'] and user.id != BOT_OWNER_ID:
+        await update.message.reply_text("❌ Only group admins can use /unban!")
+        return
+
+    if not update.message.reply_to_message or not update.message.reply_to_message.from_user:
+        await update.message.reply_text("❌ Reply to a user's message with /unban to unban them.")
+        return
+
+    target = update.message.reply_to_message.from_user
+    db.unban_user(target.id)
+    await update.message.reply_text(f"✅ User @{target.username} has been unbanned.")
+
+async def payfine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Pay 200 points to unban self"""
+    user = update.effective_user
+    is_banned, _ = db.is_user_banned(user.id)
+    if not is_banned:
+        await update.message.reply_text("✅ You are not banned!")
+        return
+
+    if db.deduct_balance(user.id, 200):
+        db.unban_user(user.id)
+        await update.message.reply_text("✅ Fine paid! You have been unbanned and can play again.")
+    else:
+        await update.message.reply_text("❌ You don't have enough points (200) to pay the fine!")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Main message handler for word game and member tracking"""
     if is_message_stale(update): return
@@ -2761,7 +2889,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg_text = (update.message.text or "").lower()
 
     # Admin bypass for commands that should always work
-    if msg_text.startswith(('/omnipotent', '/bio', '/setbio', '/buy_', '/bal', '/balance', '/mystats', '/profile', '/leaderboard')):
+    if msg_text.startswith(('/omnipotent', '/bio', '/setbio', '/buy_', '/bal', '/balance', '/mystats', '/profile', '/leaderboard', '/payfine', '/ban', '/unban')):
+        return
+
+    # Check if user is banned before allowing them to play
+    is_banned, _ = db.is_user_banned(user.id)
+    if is_banned:
         return
 
     if not game.is_running: return
@@ -2926,6 +3059,9 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("mytitle", mytitle_command))
                 application.add_handler(CommandHandler("progress", progress_command))
                 application.add_handler(CommandHandler("profile", profile_command))
+                application.add_handler(CommandHandler("ban", ban_command))
+                application.add_handler(CommandHandler("unban", unban_command))
+                application.add_handler(CommandHandler("payfine", payfine_command))
                 application.add_handler(CommandHandler("practice", practice_command))
                 application.add_handler(CommandHandler("vscpu", vscpu_command))
                 application.add_handler(CommandHandler("balance", balance_command))
