@@ -2580,7 +2580,7 @@ async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     # Get all unique users seen in this specific chat
-    c.execute("SELECT username FROM chat_members WHERE chat_id = ?", (chat_id,))
+    c.execute("SELECT DISTINCT user_id, username FROM chat_members WHERE chat_id = ?", (chat_id,))
     rows = c.fetchall()
     conn.close()
     
@@ -2590,15 +2590,23 @@ async def tagall_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     tag_msg = "📢 <b>ATTENTION EVERYONE!</b> 📢\n\n"
     usernames = []
-    for r in rows:
-        if r[0]:
-            name = r[0]
-            if not name.startswith('@'):
-                usernames.append(f"@{name}")
-            else:
+    for user_id, name in rows:
+        if name:
+            # Check if it's already a formatted link or a simple @username
+            if name.startswith('@'):
                 usernames.append(name)
+            elif '<a href=' in name:
+                usernames.append(name)
+            else:
+                # Fallback for old data or edge cases: create a mention link
+                usernames.append(f'<a href="tg://user?id={user_id}">{name}</a>')
     
-    tag_msg += " ".join(list(set(usernames))) # Unique tags
+    # Sort for a clean look
+    unique_usernames = sorted(list(set(usernames)))
+    
+    # Telegram allows up to 4096 characters per message.
+    # We join them with spaces.
+    tag_msg += " ".join(unique_usernames)
     
     custom_msg = " ".join(context.args) if context.args else "Wake up! A new challenge awaits!"
     tag_msg += f"\n\n💬 {custom_msg}"
@@ -2728,11 +2736,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user = update.effective_user
     
-    # Track member for .tagall
+    # Track member for .tagall whenever they send a message
     if not user.is_bot:
-        username = user.username or user.first_name or "Player"
+        # Use full username if available, otherwise first_name with a mention link
+        if user.username:
+            username = f"@{user.username}"
+        else:
+            # For users without usernames, we use a mention link so they still get a notification
+            # We use double quotes for the attribute to avoid potential nested quote issues
+            username = f'<a href="tg://user?id={user.id}">{user.first_name}</a>'
+            
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
+        # Always update the username/link to the latest one seen
         c.execute("INSERT OR REPLACE INTO chat_members (chat_id, user_id, username) VALUES (?, ?, ?)",
                  (chat_id, user.id, username))
         conn.commit()
