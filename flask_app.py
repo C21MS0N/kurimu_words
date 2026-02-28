@@ -19,4 +19,4 @@ def health():
 
 if __name__ == '__main__':
     print("🌐 Flask health server starting on 0.0.0.0:5000", flush=True)
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)
+    app.run(host='0.0.0.0', port=10000, debug=False, use_reloader=False, threaded=True)
