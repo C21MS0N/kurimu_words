@@ -2644,19 +2644,30 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<b>2. GAME MODES</b>\n"
         "🤓 <b>NERD (Progressive):</b> Word length increases every few rounds.\n"
         "🎲 <b>CHAOS (Random):</b> Every turn has a random length requirement.\n"
-        "💪 <b>PRACTICE:</b> Solo training to build speed (/practice [easy/medium/hard]).\n\n"
+        "💪 <b>PRACTICE:</b> Solo training (/practice [easy/medium/hard]).\n"
+        "🤖 <b>VS CPU:</b> Play against the bot (/vscpu).\n\n"
         "<b>3. SHOP & BOOSTS</b>\n"
         "📖 <b>HINT (80 pts):</b> Shows 3 possible words.\n"
         "⏭️ <b>SKIP (150 pts):</b> Skip your turn without point penalty.\n"
-        "🔄 <b>REBOUND (250 pts):</b> Skip and pass the same target to the next player!\n"
-        "🛡️ <b>STREAK PROTECT (Shop):</b> Auto-saves your streak on timeout/forfeit.\n\n"
+        "🔄 <b>REBOUND (250 pts):</b> Skip and pass to the next player!\n"
+        "🛡️ <b>STREAK PROTECT (400 pts):</b> Prevents streak reset on timeout.\n\n"
         "<b>4. TITLES & ACHIEVEMENTS</b>\n"
         "🏆 <b>/achievements:</b> View your unlocked titles.\n"
-        "📊 <b>/progress:</b> Check milestone requirements for next levels.\n"
-        "👤 <b>/profile:</b> Show off your stats and current title.\n\n"
-        "<b>5. SPECIAL COMMANDS</b>\n"
-        "📢 <b>.tagall:</b> Mention all active group members (Admins/Authorized only).\n"
-        "💰 <b>/donate:</b> Give your shop balance to another player.\n\n"
+        "📊 <b>/progress:</b> Check milestone requirements.\n"
+        "👤 <b>/profile:</b> Show stats and current title.\n"
+        "🎭 <b>/settitle:</b> Equip an unlocked title.\n\n"
+        "<b>5. CURRENCY & SOCIAL</b>\n"
+        "💰 <b>/balance / /bal:</b> View your points.\n"
+        "🎲 <b>/gamble [amt] [heads/tails]:</b> Risk points (12.5% win, 1.5x payout).\n"
+        "🎁 <b>/donate:</b> Give points to another player.\n"
+        "📅 <b>/daily:</b> Claim your daily reward.\n\n"
+        "<b>6. LOBBY COMMANDS</b>\n"
+        "🏠 <b>/lobby:</b> Create a new game lobby.\n"
+        "➕ <b>/join:</b> Join the current lobby.\n"
+        "🚀 <b>/begin:</b> Start the game.\n"
+        "🛑 <b>/stop:</b> Stop the current game.\n"
+        "⚙️ <b>/difficulty:</b> Set game difficulty.\n"
+        "🛠️ <b>/authority:</b> Set booster limits (Lobby Owner).\n\n"
         "<i>Compete, earn points, and climb the global leaderboard!</i>\n\n"
         "✨ <b>Developed by 『ƈʀɨʍֆօռ♦』</b> ✨"
     )
@@ -2765,6 +2776,77 @@ async def payfine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ You don't have enough points (200) to pay the fine!")
 
+async def gamble_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Risk points on a coin flip (12.5% win chance, 1.5x payout)"""
+    if is_message_stale(update): return
+    user = update.effective_user
+    
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text(
+            "🎲 <b>Gamble Arena</b>\n\n"
+            "Usage: <code>/gamble [amount] [heads/tails]</code>\n"
+            "Example: <code>/gamble 250 heads</code>\n\n"
+            "• Min bet: 100 pts\n"
+            "• Amount must end with '0'\n"
+            "• Win chance: 12.5%\n"
+            "• Payout: 1.5x",
+            parse_mode='HTML'
+        )
+        return
+
+    try:
+        amount = int(context.args[0])
+        side = context.args[1].lower()
+    except ValueError:
+        await update.message.reply_text("❌ Invalid amount! Please provide a number.")
+        return
+
+    if side not in ['heads', 'tails']:
+        await update.message.reply_text("❌ Choose either 'heads' or 'tails'.")
+        return
+
+    if amount < 100:
+        await update.message.reply_text("❌ Minimum gamble amount is 100 points.")
+        return
+
+    if amount % 10 != 0:
+        await update.message.reply_text("❌ Amount must end with a '0' (e.g., 100, 250, 1000).")
+        return
+
+    # Check balance
+    balance = db.get_balance(user.id)
+    if balance < amount:
+        await update.message.reply_text(f"❌ You don't have enough points! Balance: {balance} pts")
+        return
+
+    # Deduct first
+    db.deduct_balance(user.id, amount)
+    
+    # 12.5% chance to win (1/8)
+    win = random.random() < 0.125
+    
+    await update.message.reply_text("🪙 The coin is in the air...")
+    await asyncio.sleep(1.5)
+
+    if win:
+        winnings = int(amount * 1.5)
+        db.add_balance(user.id, winnings)
+        await update.message.reply_text(
+            f"🎊 <b>WINNER!</b> 🎊\n\n"
+            f"The coin landed on <b>{side.upper()}</b>!\n"
+            f"You won <b>{winnings}</b> points!",
+            parse_mode='HTML'
+        )
+    else:
+        # Lose: land on the opposite side or just simulate loss
+        other_side = 'tails' if side == 'heads' else 'heads'
+        await update.message.reply_text(
+            f"💸 <b>YOU LOST!</b> 💸\n\n"
+            f"The coin landed on <b>{other_side.upper()}</b>.\n"
+            f"Better luck next time!",
+            parse_mode='HTML'
+        )
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Main message handler for word game and member tracking"""
     if is_message_stale(update): return
@@ -2803,6 +2885,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check if user is banned before allowing them to play
     is_banned, _ = db.is_user_banned(user.id)
     if is_banned:
+        await update.message.reply_text("🚫 <b>The higher ups have banned your ass.</b>", parse_mode='HTML')
         return
 
     if not game.is_running: return
@@ -2979,6 +3062,7 @@ if __name__ == '__main__':
                 application.add_handler(CommandHandler("revoke", grant_permission))
                 application.add_handler(CommandHandler("setbalpic", setbalpic_command))
                 application.add_handler(CommandHandler("reset", reset_command))
+                application.add_handler(CommandHandler("gamble", gamble_command))
                 application.add_handler(MessageHandler(filters.Regex(r'^\.tagall'), tagall_command))
                 application.add_handler(CommandHandler("help", help_command))
                 application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
