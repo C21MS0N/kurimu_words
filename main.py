@@ -66,14 +66,14 @@ CHALLENGE_SEQUENCE = [
 # Bot Owner (for exclusive KAMI title) - Set via environment variable or hardcode here
 BOT_OWNER_ID = int(os.environ.get("BOT_OWNER_ID", "0"))  # Set BOT_OWNER_ID env var to your Telegram user ID
 
-    # STAGES multipliers
-    STAGES = {
-        1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 1},
-        2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 2},
-        3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 4},
-        4: {'display': 'Ⅳ', 'color': '🟣', 'multiplier': 5},
-        5: {'display': 'Ⅴ', 'color': '🔴', 'multiplier': 6.5},
-    }
+# Available Titles with Dynamic Requirements (Multi-Stage)
+STAGES = {
+    1: {'display': 'Ⅰ', 'color': '⚪', 'multiplier': 1},
+    2: {'display': 'Ⅱ', 'color': '🟢', 'multiplier': 2},
+    3: {'display': 'Ⅲ', 'color': '🔵', 'multiplier': 4},
+    4: {'display': 'Ⅳ', 'color': '🟣', 'multiplier': 5},
+    5: {'display': 'Ⅴ', 'color': '🔴', 'multiplier': 6.5},
+}
 
 TITLES = {
     'legend': {'display': '👑 LEGEND', 'base_req': 350, 'stat': 'total_score', 'desc': 'Reach {req} total score'},
@@ -1900,109 +1900,6 @@ async def progress_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(text, parse_mode='HTML')
 
-async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if update.message.reply_to_message:
-        target_user = update.message.reply_to_message.from_user
-    else:
-        target_user = user
-
-    stats = db.get_player_stats(target_user.id)
-    if not stats:
-        await update.message.reply_text("👤 User has no record yet!")
-        return
-
-    unlocked_list = db.get_unlocked_titles(target_user.id)
-    unlocked_stages = {}
-    total_stages = 0
-    for entry in unlocked_list:
-        if ':' in entry:
-            try:
-                k, s = entry.split(':')
-                val = int(s)
-                unlocked_stages[k] = val
-                total_stages += val
-            except (ValueError, IndexError):
-                continue
-    
-    active_key = db.get_active_title(target_user.id)
-    title_display = ""
-    is_kami = False
-    
-    if active_key in TITLES:
-        if TITLES[active_key].get('exclusive'):
-            title_display = f"✨ <b>{TITLES[active_key]['display']}</b> ✨"
-            is_kami = True
-        else:
-            stage = unlocked_stages.get(active_key, 1)
-            stage_data = STAGES.get(stage, STAGES[1])
-            title_display = f"{stage_data['color']} <b>{TITLES[active_key]['display']} {stage_data['display']}</b>"
-    
-    # Scale border aesthetics with total stages
-    if is_kami:
-        beauty_border = "✦ . ✦ . ✦ . ✦ . ✦ . ✦ . ✦"
-        profile_header = "🌌 <b>𝐂𝐄𝐋𝐄𝐒𝐓𝐈𝐀𝐋 𝐄𝐍𝐓𝐈𝐓𝐘</b> 🌌"
-        stats_header = "✧ <b>𝐃𝐈𝐕𝐈𝐍𝐄 𝐄𝐒𝐒𝐄𝐍𝐂𝐄</b> ✧"
-    elif total_stages >= 20:
-        beauty_border = "💠 ═══ 💠 ═══ 💠 ═══ 💠"
-        profile_header = "👑 <b>𝐄𝐋𝐈𝐓𝐄 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 👑"
-        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
-    elif total_stages >= 15:
-        beauty_border = "✨ ═══ ✨ ═══ ✨ ═══ ✨"
-        profile_header = "💎 <b>𝐌𝐀𝐒𝐓𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 💎"
-        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
-    elif total_stages >= 10:
-        beauty_border = "🔶 ═══ 🔶 ═══ 🔶 ═══ 🔶"
-        profile_header = "⚔️ <b>𝐖𝐀𝐑𝐑𝐈𝐎𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> ⚔️"
-        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
-    elif total_stages >= 5:
-        beauty_border = "🔹 ═══ 🔹 ═══ 🔹 ═══ 🔹"
-        profile_header = "🛡️ <b>𝐀𝐃𝐕𝐄𝐍𝐓𝐔𝐑𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b> 🛡️"
-        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
-    else:
-        beauty_border = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
-        profile_header = "👤 <b>𝐏𝐋𝐀𝐘𝐄𝐑 𝐏𝐑𝐎𝐅𝐈𝐋𝐄</b>"
-        stats_header = "📊 <b>𝐆𝐀𝐌𝐄 𝐒𝐓𝐀𝐓𝐈𝐒𝐓𝐈𝐂𝐒</b>"
-
-    text = f"{beauty_border}\n"
-    text += f"{profile_header}\n"
-    text += f"{beauty_border}\n\n"
-    
-    text += f"👤 <b>𝐍𝐚𝐦𝐞:</b> <code>{target_username}</code>\n"
-    if target_banned:
-        ban_text = f" (Banned until {target_expiry.strftime('%m/%d %H:%M')})" if target_expiry else " (Permanently Banned)"
-        text += f"🚫 <b>𝐒𝐭𝐚𝐭𝐮𝐬:</b> <code>Banned{ban_text}</code>\n"
-    if title_display:
-        text += f"🎖️ <b>𝐓𝐢𝐭𝐥𝐞:</b> {title_display}\n"
-    text += f"💰 <b>𝐁𝐚𝐥𝐚𝐧𝐜𝐞:</b> <code>{db.get_balance(target_user.id)}</code> pts\n\n"
-    
-    # Bio section (Enhanced display)
-    bio_data, _ = db.get_bio(target_user.id)
-    if bio_data:
-        text += f"📜 <b>𝐁𝐢𝐨:</b>\n<i>« {bio_data} »</i>\n\n"
-    elif str(target_user.id) == str(user.id):
-        text += f"💡 <i>Tip: Use /buy_bio to add a personal message!</i>\n\n"
-    
-    text += f"{stats_header}\n"
-    text += f"┣ 𝐒𝐜𝐨𝐫𝐞: <code>{stats[7]}</code>\n"
-    text += f"┣ 𝐖𝐨𝐫𝐝𝐬: <code>{stats[2]}</code>\n"
-    text += f"┣ 𝐒𝐭𝐫𝐞𝐚𝐤: <code>{stats[6]}</code>\n"
-    text += f"┣ 𝐋𝐨𝐧𝐠𝐞𝐬𝐭: <code>{stats[5]}</code>\n"
-    text += f"┗ 𝐆𝐚𝐦𝐞𝐬: <code>{stats[3]}</code>\n\n"
-    
-    if not is_kami:
-        text += f"🏆 <b>𝐌𝐀𝐒𝐓𝐄𝐑𝐘 𝐏𝐑𝐎𝐆𝐑𝐄𝐒𝐒</b>\n"
-        for t_key, t_data in TITLES.items():
-            if t_data.get('exclusive'): continue
-            stage = unlocked_stages.get(t_key, 0)
-            # Use cleaner progress blocks
-            filled = "⬛" * stage
-            empty = "⬜" * (5 - stage)
-            text += f"{t_data['display'].split()[0]} {filled}{empty} ({stage}/5)\n"
-    else:
-        text += f"🌟 <b>𝐒𝐔𝐏𝐑𝐄𝐌𝐄 𝐀𝐔𝐓𝐇𝐎𝐑𝐈𝐓𝐘</b> 🌟\n"
-        text += f"<i>Absolute ruler of the word domain.</i>\n"
-    
     text += f"\n{beauty_border}"
     
     await update.message.reply_text(text, parse_mode='HTML')
@@ -2385,6 +2282,8 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ Error searching for user!")
             return
     
+    # Check if user is banned
+    is_banned, expiry = db.is_user_banned(user.id)
     if is_banned:
         if expiry:
             await update.message.reply_text(f"🚫 You are currently banned from playing! Expiry: {expiry.strftime('%Y-%m-%d %H:%M')}\n\nYou can pay a 200 point fine to unban immediately with /payfine")
@@ -2429,6 +2328,15 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_display = ""
     is_kami = False
     
+    # Check if requester is banned
+    is_banned, expiry = db.is_user_banned(user.id)
+    if is_banned:
+        if expiry:
+            await update.message.reply_text(f"🚫 You are currently banned from playing! Expiry: {expiry.strftime('%Y-%m-%d %H:%M')}\n\nYou can pay a 200 point fine to unban immediately with /payfine")
+        else:
+            await update.message.reply_text("🚫 You are permanently banned from playing!\n\nYou can pay a 200 point fine to unban immediately with /payfine")
+        return
+
     # Check if target user is banned
     target_banned, target_expiry = db.is_user_banned(target_user_id)
     
@@ -2547,7 +2455,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_text += f" ┣ 🔥 Streak: <code>{stats[6]}</code>\n"
     profile_text += f" ┣ 🎮 Games: <code>{stats[3]}</code>\n"
     profile_text += f" ┣ 📏 Longest: <code>{stats[4]}</code> ({stats[5]}L)\n"
-    profile_text += f" ┗ 📈 Average: <code>{stats[8]:.1f}</code>\n\n"
+    profile_text += f" ┗ 📈 Average: <code>{stats[8] if stats[8] is not None else 0.0:.1f}</code>\n\n"
 
     if not is_kami:
         profile_text += f"🏆 <b>MASTERY LEVELS</b>\n"
